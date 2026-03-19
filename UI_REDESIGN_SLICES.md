@@ -45,21 +45,22 @@ Acceptance:
 Rollback:
 - Revert menu styles/placement only; event handlers can remain.
 
-### Slice 3: Expanded Detail Layout (Core Readability)
+### Slice 3: Split Layout with Fixed Reader Pane
 Scope:
-- Split expanded area into:
-  - Detail header (role/company/location/time + actions)
-  - JD content viewport
-- Move `Copy JD` into detail header action area.
-- Reduce visual fragmentation (fewer heavy borders, cleaner spacing).
+- Replace card inline expansion with a fixed bottom reader pane.
+- Compress top area into a single-line toolbar (capture remains primary action).
+- Keep list and reader visible together; selecting a card updates reader content.
+- Add draggable divider to resize list vs reader height.
+- Move `Copy JD` and `Open source` into reader header action area.
 
 Acceptance:
-- Expanded state reads like one cohesive panel.
-- `Copy JD` is easy to find and does not interrupt reading flow.
-- Long JD text remains scrollable without breaking card boundaries.
+- No card inline expansion remains in list.
+- Switching jobs does not require page-like navigation.
+- Reader pane remains usable with long JD text and narrow side panel width.
+- Divider resizing persists and does not break layout.
 
 Rollback:
-- Revert only expanded-area markup and styles.
+- Revert workspace split layout while preserving Slice 1 and Slice 2 card behavior.
 
 ### Slice 4: Salary Removal End-to-End
 Scope:
@@ -119,7 +120,7 @@ Acceptance:
 
 ## Observed Issues Backlog
 - Menu popup can be hidden behind adjacent cards when opened near card boundaries.
-  - Planned fix: Slice 2 (active card stacking context + stronger menu layering).
+  - Resolved in Slice 2 (active card stacking context + stronger menu layering).
 
 ## Manual QA Checklist (per slice)
 - Capture one new job from BOSS page.
