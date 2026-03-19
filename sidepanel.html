@@ -12,6 +12,7 @@
         <div class="toolbar-left">
           <span class="toolbar-title">Opportunity Queue</span>
           <span id="countBadge" class="count-badge">0 saved</span>
+          <span id="statusText">Ready.</span>
         </div>
         <button id="captureBtn" class="primary-btn">Capture</button>
         <div class="toolbar-actions">
@@ -19,10 +20,6 @@
           <button id="exportJsonBtn" class="ghost-btn toolbar-btn">Export JSON</button>
         </div>
       </header>
-
-      <section class="inline-status">
-        <span id="statusText">Ready.</span>
-      </section>
 
       <main id="workspace" class="workspace">
         <section class="queue-pane">
@@ -44,7 +41,6 @@
               <div class="reader-heading">
                 <h2 id="readerRole"></h2>
                 <p id="readerMeta"></p>
-                <p id="readerCaptured"></p>
               </div>
               <div class="reader-actions">
                 <button id="readerCopyBtn" type="button" class="ghost-btn compact-btn">Copy JD</button>
@@ -81,10 +77,6 @@
               </label>
             </section>
 
-            <footer class="footer-meta">
-              <span id="readerReviewFlag" class="review-flag"></span>
-              <span id="readerSource" class="summary-source"></span>
-            </footer>
           </article>
         </section>
       </main>

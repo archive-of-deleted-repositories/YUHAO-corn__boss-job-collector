@@ -1,9 +1,9 @@
 const STORAGE_KEY = "opportunityQueueJobs";
 const PANE_RATIO_KEY = "opportunityQueuePaneRatio";
 
-const MIN_QUEUE_RATIO = 0.32;
-const MAX_QUEUE_RATIO = 0.7;
-const DEFAULT_QUEUE_RATIO = 0.48;
+const MIN_QUEUE_RATIO = 0.45;
+const MAX_QUEUE_RATIO = 0.82;
+const DEFAULT_QUEUE_RATIO = 0.62;
 
 const statusText = document.getElementById("statusText");
 const countBadge = document.getElementById("countBadge");
@@ -20,13 +20,10 @@ const readerEmpty = document.getElementById("readerEmpty");
 const readerCard = document.getElementById("readerCard");
 const readerRole = document.getElementById("readerRole");
 const readerMeta = document.getElementById("readerMeta");
-const readerCaptured = document.getElementById("readerCaptured");
 const readerJdText = document.getElementById("readerJdText");
 const readerCopyBtn = document.getElementById("readerCopyBtn");
 const readerOpenBtn = document.getElementById("readerOpenBtn");
 const readerEditorPanel = document.getElementById("readerEditorPanel");
-const readerReviewFlag = document.getElementById("readerReviewFlag");
-const readerSource = document.getElementById("readerSource");
 const readerFields = Array.from(document.querySelectorAll("[data-reader-field]"));
 
 const state = {
@@ -161,7 +158,9 @@ async function saveJobs() {
 }
 
 function setStatus(message) {
-  statusText.textContent = message;
+  if (statusText) {
+    statusText.textContent = message;
+  }
 }
 
 function normalizeJobUrl(url = "") {
@@ -359,11 +358,8 @@ function renderReader(job) {
   readerCard.classList.remove("is-hidden");
 
   readerRole.textContent = job.role || "Untitled role";
-  readerMeta.textContent = formatMetaLine(job.company, job.location);
-  readerCaptured.textContent = `Captured ${formatDate(job.capturedAt)}`;
+  readerMeta.textContent = formatReaderMeta(job);
   readerJdText.textContent = job.jdText || "No JD captured.";
-  readerReviewFlag.textContent = job.salaryNeedsReview ? "Salary needs review" : "";
-  readerSource.textContent = formatSource(job.url);
 
   readerCopyBtn.disabled = !job.jdText;
   readerOpenBtn.disabled = !job.url;
@@ -651,8 +647,8 @@ function formatSource(url = "") {
   }
 }
 
-function formatMetaLine(company, location) {
-  const parts = [company, location].filter(Boolean);
+function formatReaderMeta(job) {
+  const parts = [job.company, job.location, formatRelativeDate(job.capturedAt), formatSource(job.url)].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Company or location pending";
 }
 
