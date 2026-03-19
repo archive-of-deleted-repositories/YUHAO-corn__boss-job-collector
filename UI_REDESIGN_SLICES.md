@@ -117,6 +117,10 @@ Acceptance:
 5. Slice 5 (optional, can be delayed)
 6. Slice 6
 
+## Observed Issues Backlog
+- Menu popup can be hidden behind adjacent cards when opened near card boundaries.
+  - Planned fix: Slice 2 (active card stacking context + stronger menu layering).
+
 ## Manual QA Checklist (per slice)
 - Capture one new job from BOSS page.
 - Capture same job again (update path).

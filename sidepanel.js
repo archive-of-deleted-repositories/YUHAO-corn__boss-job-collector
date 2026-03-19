@@ -31,11 +31,23 @@ function bindTopLevelEvents() {
       closeAllMenus();
     }
   });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeAllMenus();
+    }
+  });
 }
 
 function closeAllMenus() {
   document.querySelectorAll('.menu-panel').forEach((panel) => {
     panel.hidden = true;
+  });
+  document.querySelectorAll('.job-card.is-menu-active').forEach((card) => {
+    card.classList.remove('is-menu-active');
+  });
+  document.querySelectorAll('.menu-trigger[aria-expanded="true"]').forEach((trigger) => {
+    trigger.setAttribute('aria-expanded', 'false');
   });
 }
 
@@ -146,15 +158,19 @@ function render() {
     menuTrigger.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const nextHidden = !menuPanel.hidden;
+      const shouldOpen = menuPanel.hidden;
       closeAllMenus();
-      menuPanel.hidden = nextHidden;
+      if (shouldOpen) {
+        menuPanel.hidden = false;
+        card.classList.add('is-menu-active');
+        menuTrigger.setAttribute('aria-expanded', 'true');
+      }
     });
 
     menuOpen.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      menuPanel.hidden = true;
+      closeAllMenus();
       if (job.url) {
         window.open(job.url, '_blank', 'noopener,noreferrer');
       }
@@ -163,7 +179,7 @@ function render() {
     menuEdit.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      menuPanel.hidden = true;
+      closeAllMenus();
       editorPanel.classList.toggle('is-hidden');
       card.open = true;
     });
@@ -171,7 +187,7 @@ function render() {
     menuDelete.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      menuPanel.hidden = true;
+      closeAllMenus();
       state.jobs = state.jobs.filter((item) => item.id !== job.id);
       await saveJobs();
       render();
