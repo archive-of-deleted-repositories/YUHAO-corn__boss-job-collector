@@ -1,9 +1,4 @@
 const STORAGE_KEY = "opportunityQueueJobs";
-const PANE_RATIO_KEY = "opportunityQueuePaneRatio";
-
-const MIN_QUEUE_RATIO = 0.45;
-const MAX_QUEUE_RATIO = 0.82;
-const DEFAULT_QUEUE_RATIO = 0.62;
 
 const statusText = document.getElementById("statusText");
 const countBadge = document.getElementById("countBadge");
@@ -13,8 +8,6 @@ const template = document.getElementById("jobCardTemplate");
 const captureBtn = document.getElementById("captureBtn");
 const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
-const workspace = document.getElementById("workspace");
-const paneDivider = document.getElementById("paneDivider");
 
 const readerEmpty = document.getElementById("readerEmpty");
 const readerCard = document.getElementById("readerCard");
@@ -31,18 +24,14 @@ const state = {
   dragId: null,
   selectedJobId: null,
   editorJobId: null,
-  paneRatio: DEFAULT_QUEUE_RATIO,
-  isResizing: false,
 };
 
 init();
 
 async function init() {
   await loadJobs();
-  loadPaneRatio();
   ensureValidSelection();
   bindTopLevelEvents();
-  applyPaneRatio(state.paneRatio, false);
   render();
 }
 
@@ -53,10 +42,6 @@ function bindTopLevelEvents() {
 
   readerCopyBtn.addEventListener("click", copySelectedJd);
   readerOpenBtn.addEventListener("click", openSelectedSource);
-
-  paneDivider.addEventListener("mousedown", startPaneResize);
-  window.addEventListener("mousemove", handlePaneResize);
-  window.addEventListener("mouseup", stopPaneResize);
 
   readerFields.forEach((input) => {
     input.addEventListener("change", handleReaderFieldChange);
@@ -73,53 +58,6 @@ function bindTopLevelEvents() {
       closeAllMenus();
     }
   });
-}
-
-function startPaneResize(event) {
-  event.preventDefault();
-  state.isResizing = true;
-  document.body.classList.add("is-resizing");
-}
-
-function handlePaneResize(event) {
-  if (!state.isResizing) return;
-
-  const rect = workspace.getBoundingClientRect();
-  if (!rect.height) return;
-  const ratio = (event.clientY - rect.top) / rect.height;
-  applyPaneRatio(ratio, false);
-}
-
-function stopPaneResize() {
-  if (!state.isResizing) return;
-  state.isResizing = false;
-  document.body.classList.remove("is-resizing");
-  persistPaneRatio();
-}
-
-function loadPaneRatio() {
-  const raw = window.localStorage.getItem(PANE_RATIO_KEY);
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed)) {
-    state.paneRatio = clampPaneRatio(parsed);
-  }
-}
-
-function persistPaneRatio() {
-  window.localStorage.setItem(PANE_RATIO_KEY, String(state.paneRatio));
-}
-
-function applyPaneRatio(ratio, persist = true) {
-  state.paneRatio = clampPaneRatio(ratio);
-  const percentage = `${Math.round(state.paneRatio * 100)}%`;
-  workspace.style.setProperty("--queue-size", percentage);
-  if (persist) {
-    persistPaneRatio();
-  }
-}
-
-function clampPaneRatio(value) {
-  return Math.min(MAX_QUEUE_RATIO, Math.max(MIN_QUEUE_RATIO, value));
 }
 
 function closeAllMenus() {
@@ -198,10 +136,17 @@ function getSelectedJob() {
 }
 
 function selectJob(jobId, { keepEditor = false } = {}) {
+  const isSwitching = state.selectedJobId && state.selectedJobId !== jobId;
   if (state.selectedJobId === jobId && keepEditor) return;
   state.selectedJobId = jobId;
   if (!keepEditor && state.editorJobId !== jobId) {
     state.editorJobId = null;
+  }
+  if (isSwitching && readerCard) {
+    readerCard.classList.add("is-switching");
+    window.setTimeout(() => {
+      readerCard.classList.remove("is-switching");
+    }, 160);
   }
   render();
 }

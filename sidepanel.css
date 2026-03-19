@@ -11,7 +11,6 @@
   --danger: #cf455c;
   --shadow: 0 10px 24px rgba(17, 30, 46, 0.09);
   --radius: 14px;
-  --queue-size: 62%;
 }
 
 * {
@@ -30,11 +29,6 @@ body {
   background:
     radial-gradient(circle at top left, rgba(23, 199, 177, 0.12), transparent 30%),
     linear-gradient(180deg, #f6fbff 0%, var(--bg) 100%);
-}
-
-body.is-resizing {
-  cursor: row-resize;
-  user-select: none;
 }
 
 button,
@@ -153,20 +147,40 @@ textarea {
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(180px, var(--queue-size)) 8px minmax(120px, calc(100% - var(--queue-size) - 8px));
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
 }
 
 .queue-pane {
   min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
 }
 
-.pane-divider {
-  margin: 1px 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(26, 39, 58, 0.08), rgba(12, 163, 147, 0.28), rgba(26, 39, 58, 0.08));
-  cursor: row-resize;
+.queue-content {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.pane-head {
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.pane-head span {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pane-head-viewing span {
+  color: rgba(12, 163, 147, 0.9);
 }
 
 .empty-state {
@@ -426,8 +440,8 @@ textarea {
 .reader-pane {
   min-height: 0;
   display: grid;
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
 }
 
 .reader-empty {
@@ -435,7 +449,7 @@ textarea {
   place-items: center;
   color: var(--muted);
   font-size: 12px;
-  padding: 8px 6px;
+  padding: 8px 2px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -448,22 +462,28 @@ textarea {
   padding: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 6px;
+  gap: 4px;
   min-height: 0;
   overflow: hidden;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+  transition: opacity 150ms ease, transform 150ms ease;
 }
 
 .reader-card.is-hidden {
   display: none;
 }
 
+.reader-card.is-switching {
+  opacity: 0.72;
+  transform: translateY(2px);
+}
+
 .reader-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   align-items: start;
 }
 
@@ -471,6 +491,7 @@ textarea {
   margin: 0;
   font-size: 13px;
   line-height: 1.25;
+  font-weight: 800;
 }
 
 .reader-heading p {
@@ -494,12 +515,12 @@ textarea {
 .reader-jd-text {
   margin: 0;
   min-height: 0;
-  border: 1px solid rgba(21, 33, 50, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 1px 1px 8px;
   white-space: pre-wrap;
-  line-height: 1.4;
+  line-height: 1.48;
   font-size: 11px;
   overflow: auto;
 }
