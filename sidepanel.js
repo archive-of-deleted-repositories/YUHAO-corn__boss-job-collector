@@ -793,8 +793,12 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
     const payload = await response.json();
     const outputText = extractModelOutputText(payload);
     const formatted = sanitizeFormattedText(outputText);
+    if (!formatted) {
+      logFormatterEvent("openai request:empty-output", summarizeFormatterPayload(payload));
+    }
     logFormatterEvent("openai request:done", {
       ...context,
+      rawOutputLength: outputText.length,
       outputLength: formatted.length,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
@@ -870,8 +874,12 @@ async function formatJdWithAnthropic(prompt, formatterConfig, context = {}) {
     const payload = await response.json();
     const outputText = extractAnthropicOutputText(payload);
     const formatted = sanitizeFormattedText(outputText);
+    if (!formatted) {
+      logFormatterEvent("anthropic request:empty-output", summarizeFormatterPayload(payload));
+    }
     logFormatterEvent("anthropic request:done", {
       ...context,
+      rawOutputLength: outputText.length,
       outputLength: formatted.length,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
@@ -929,24 +937,41 @@ function extractModelOutputText(payload) {
   if (typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text.trim();
   }
+  if (typeof payload?.response?.output_text === "string" && payload.response.output_text.trim()) {
+    return payload.response.output_text.trim();
+  }
 
   const outputChunks = [];
   const output = Array.isArray(payload.output) ? payload.output : [];
   output.forEach((item) => {
-    const content = Array.isArray(item?.content) ? item.content : [];
-    content.forEach((node) => {
-      if (typeof node?.text === "string" && node.text.trim()) {
-        outputChunks.push(node.text.trim());
-      }
-    });
+    collectTextFragments(item?.content, outputChunks);
+    collectTextFragments(item?.text, outputChunks);
+    collectTextFragments(item?.output_text, outputChunks);
   });
 
   if (outputChunks.length) {
-    return outputChunks.join("\n");
+    return dedupeTextFragments(outputChunks).join("\n");
   }
 
   const choiceText = payload?.choices?.[0]?.message?.content;
-  return typeof choiceText === "string" ? choiceText.trim() : "";
+  if (typeof choiceText === "string" && choiceText.trim()) {
+    return choiceText.trim();
+  }
+
+  const choiceChunks = [];
+  collectTextFragments(payload?.choices, choiceChunks);
+  if (choiceChunks.length) {
+    return dedupeTextFragments(choiceChunks).join("\n");
+  }
+
+  const fallbackChunks = [];
+  collectTextFragments(payload?.response, fallbackChunks);
+  collectTextFragments(payload?.content, fallbackChunks);
+  if (fallbackChunks.length) {
+    return dedupeTextFragments(fallbackChunks).join("\n");
+  }
+
+  return "";
 }
 
 function extractAnthropicOutputText(payload) {
@@ -967,6 +992,56 @@ function sanitizeFormattedText(text) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function collectTextFragments(value, chunks, depth = 0) {
+  if (!value || depth > 6) return;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) {
+      chunks.push(trimmed);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTextFragments(item, chunks, depth + 1));
+    return;
+  }
+
+  if (typeof value !== "object") {
+    return;
+  }
+
+  ["output_text", "text", "content"].forEach((key) => {
+    if (key in value) {
+      collectTextFragments(value[key], chunks, depth + 1);
+    }
+  });
+}
+
+function dedupeTextFragments(chunks) {
+  const seen = new Set();
+  return chunks.filter((chunk) => {
+    const key = chunk.trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function summarizeFormatterPayload(payload) {
+  const keys = payload && typeof payload === "object" ? Object.keys(payload).slice(0, 8) : [];
+  const outputItems = Array.isArray(payload?.output) ? payload.output.length : 0;
+  const contentItems = Array.isArray(payload?.content) ? payload.content.length : 0;
+  const preview = JSON.stringify(payload).slice(0, 280);
+  return {
+    keys,
+    outputItems,
+    contentItems,
+    preview,
+  };
 }
 
 function normalizeComparableText(text) {
