@@ -4,6 +4,10 @@
 
 ## 最快路径
 
+Release 下载页：
+
+https://github.com/YUHAO-corn/boss-job-collector/releases/latest
+
 1. 打开项目的 `GitHub Releases` 页面
 2. 下载最新的 `boss-job-collector-vX.Y.Z-unpacked.zip`
 3. 解压压缩包到一个你找得到的位置，例如桌面

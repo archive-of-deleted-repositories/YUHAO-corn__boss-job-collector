@@ -2,6 +2,10 @@
 
 `BOSS 岗位收藏助手` 是一个面向 `BOSS 直聘` 的 Chromium 扩展，用来把岗位详情快速保存到侧边栏，方便后续筛选、排序、备注和导出。
 
+下载入口：
+- 最新版本下载页：https://github.com/YUHAO-corn/boss-job-collector/releases/latest
+- 当前首个公开版本：https://github.com/YUHAO-corn/boss-job-collector/releases/tag/v0.1.0
+
 这个仓库同时服务两类人：
 - 想直接安装使用的用户
 - 想自行修改或收录源码的开发者
@@ -22,7 +26,9 @@
 
 ## 快速安装
 
-给急着使用的非技术用户，推荐直接从 `GitHub Releases` 下载打包好的安装包。
+给急着使用的非技术用户，推荐直接从 `GitHub Releases` 下载打包好的安装包：
+
+https://github.com/YUHAO-corn/boss-job-collector/releases/latest
 
 1. 打开本项目的 `Releases` 页面
 2. 下载 `boss-job-collector-vX.Y.Z-unpacked.zip`
