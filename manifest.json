@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Opportunity Queue",
+  "version": "0.1.0",
+  "description": "Capture BOSS job postings into a sortable side panel queue.",
+  "permissions": ["storage", "tabs", "scripting", "sidePanel"],
+  "host_permissions": ["https://www.zhipin.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Opportunity Queue"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

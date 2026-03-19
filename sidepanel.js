@@ -1,0 +1,419 @@
+const STORAGE_KEY = 'opportunityQueueJobs';
+const statusText = document.getElementById('statusText');
+const countBadge = document.getElementById('countBadge');
+const emptyState = document.getElementById('emptyState');
+const jobList = document.getElementById('jobList');
+const template = document.getElementById('jobCardTemplate');
+const captureBtn = document.getElementById('captureBtn');
+const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
+const exportJsonBtn = document.getElementById('exportJsonBtn');
+
+const state = {
+  jobs: [],
+  dragId: null,
+};
+
+init();
+
+async function init() {
+  await loadJobs();
+  bindTopLevelEvents();
+  render();
+}
+
+function bindTopLevelEvents() {
+  captureBtn.addEventListener('click', captureCurrentJob);
+  copyMarkdownBtn.addEventListener('click', copyMarkdown);
+  exportJsonBtn.addEventListener('click', exportJson);
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.menu-wrap')) {
+      closeAllMenus();
+    }
+  });
+}
+
+function closeAllMenus() {
+  document.querySelectorAll('.menu-panel').forEach((panel) => {
+    panel.hidden = true;
+  });
+}
+
+async function loadJobs() {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  const jobs = Array.isArray(stored[STORAGE_KEY]) ? stored[STORAGE_KEY] : [];
+  const deduped = new Map();
+
+  jobs.forEach((job) => {
+    const normalizedUrl = normalizeJobUrl(job.url || job.id || '');
+    const normalizedId = normalizeJobUrl(job.id || job.url || normalizedUrl);
+    const normalizedJob = {
+      ...job,
+      id: normalizedId || job.id,
+      url: normalizedUrl || job.url,
+    };
+    deduped.set(normalizedJob.id || normalizedJob.url || crypto.randomUUID(), normalizedJob);
+  });
+
+  state.jobs = Array.from(deduped.values());
+}
+
+async function saveJobs() {
+  await chrome.storage.local.set({ [STORAGE_KEY]: state.jobs });
+}
+
+function setStatus(message) {
+  statusText.textContent = message;
+}
+
+function normalizeJobUrl(url = '') {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return url.split('?')[0];
+  }
+}
+
+function render() {
+  countBadge.textContent = `${state.jobs.length} saved`;
+  emptyState.style.display = state.jobs.length ? 'none' : 'block';
+  jobList.innerHTML = '';
+
+  for (const job of state.jobs) {
+    const fragment = template.content.cloneNode(true);
+    const card = fragment.querySelector('.job-card');
+    const role = fragment.querySelector('.job-role');
+    const salary = fragment.querySelector('.job-salary');
+    const company = fragment.querySelector('.summary-company');
+    const location = fragment.querySelector('.summary-location');
+    const capturedAt = fragment.querySelector('.captured-at');
+    const reviewFlag = fragment.querySelector('.review-flag');
+    const jdText = fragment.querySelector('.jd-text');
+    const copyJdBtn = fragment.querySelector('.copy-jd-btn');
+    const editorPanel = fragment.querySelector('.editor-panel');
+
+    const menuTrigger = fragment.querySelector('.menu-trigger');
+    const menuPanel = fragment.querySelector('.menu-panel');
+    const menuOpen = fragment.querySelector('.menu-open');
+    const menuEdit = fragment.querySelector('.menu-edit');
+    const menuDelete = fragment.querySelector('.menu-delete');
+
+    card.dataset.id = job.id;
+    role.textContent = job.role || 'Untitled role';
+    company.textContent = job.company || 'Company pending';
+    location.textContent = job.location || 'Location pending';
+
+    if (job.salary) {
+      salary.classList.remove('is-empty');
+      salary.textContent = job.salary;
+    } else if (job.salaryNeedsReview) {
+      salary.classList.remove('is-empty');
+      salary.textContent = 'Review salary';
+    } else {
+      salary.classList.add('is-empty');
+      salary.textContent = '';
+    }
+
+    jdText.textContent = job.jdText || 'No JD captured.';
+    capturedAt.textContent = `Captured: ${formatDate(job.capturedAt)}`;
+    reviewFlag.textContent = job.salaryNeedsReview ? 'Salary needs review' : '';
+
+    copyJdBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(job.jdText || '');
+        setStatus('Copied JD text.');
+      } catch {
+        setStatus('Could not copy JD text.');
+      }
+    });
+
+    menuTrigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextHidden = !menuPanel.hidden;
+      closeAllMenus();
+      menuPanel.hidden = nextHidden;
+    });
+
+    menuOpen.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      menuPanel.hidden = true;
+      if (job.url) {
+        window.open(job.url, '_blank', 'noopener,noreferrer');
+      }
+    });
+
+    menuEdit.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      menuPanel.hidden = true;
+      editorPanel.classList.toggle('is-hidden');
+      card.open = true;
+    });
+
+    menuDelete.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      menuPanel.hidden = true;
+      state.jobs = state.jobs.filter((item) => item.id !== job.id);
+      await saveJobs();
+      render();
+      setStatus('Deleted one saved job.');
+    });
+
+    fragment.querySelectorAll('[data-field]').forEach((input) => {
+      const field = input.dataset.field;
+      input.value = job[field] || '';
+      input.addEventListener('change', async (event) => {
+        job[field] = event.target.value.trim();
+        if (field === 'salary' && job.salaryNeedsReview && job.salary) {
+          job.salaryNeedsReview = false;
+        }
+        await saveJobs();
+        render();
+        setStatus('Saved edits.');
+      });
+    });
+
+    card.addEventListener('dragstart', () => {
+      state.dragId = job.id;
+      card.classList.add('dragging');
+    });
+
+    card.addEventListener('dragend', () => {
+      state.dragId = null;
+      card.classList.remove('dragging');
+      document.querySelectorAll('.job-card').forEach((node) => node.classList.remove('drop-target'));
+    });
+
+    card.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      if (job.id !== state.dragId) {
+        card.classList.add('drop-target');
+      }
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drop-target');
+    });
+
+    card.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      card.classList.remove('drop-target');
+      if (!state.dragId || state.dragId === job.id) {
+        return;
+      }
+      reorderJobs(state.dragId, job.id);
+      await saveJobs();
+      render();
+      setStatus('Reordered queue.');
+    });
+
+    jobList.appendChild(fragment);
+  }
+}
+
+function reorderJobs(sourceId, targetId) {
+  const sourceIndex = state.jobs.findIndex((item) => item.id === sourceId);
+  const targetIndex = state.jobs.findIndex((item) => item.id === targetId);
+  if (sourceIndex === -1 || targetIndex === -1) return;
+  const [moved] = state.jobs.splice(sourceIndex, 1);
+  state.jobs.splice(targetIndex, 0, moved);
+}
+
+async function captureCurrentJob() {
+  try {
+    setStatus('Capturing current BOSS job...');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      throw new Error('No active tab found.');
+    }
+    if (!tab.url || !tab.url.includes('zhipin.com')) {
+      throw new Error('Open a BOSS page first.');
+    }
+
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractBossJob,
+    });
+
+    if (!result?.ok) {
+      throw new Error(result?.error || 'Could not capture this page.');
+    }
+
+    const existingIndex = state.jobs.findIndex((item) => normalizeJobUrl(item.id) === normalizeJobUrl(result.job.id));
+    if (existingIndex >= 0) {
+      state.jobs[existingIndex] = {
+        ...state.jobs[existingIndex],
+        ...result.job,
+      };
+      setStatus('Updated an existing saved job.');
+    } else {
+      state.jobs.unshift(result.job);
+      setStatus('Captured current job.');
+    }
+
+    await saveJobs();
+    render();
+  } catch (error) {
+    setStatus(error.message || 'Capture failed.');
+  }
+}
+
+function extractBossJob() {
+  const containsPrivateUse = (value = '') => /[\uE000-\uF8FF]/.test(value);
+
+  const readText = (node, { preserveLines = false } = {}) => {
+    if (!node) return '';
+    const raw = node.innerText || node.textContent || '';
+    const normalized = raw.replace(/\u00a0/g, '');
+
+    if (!preserveLines) {
+      return normalized.replace(/\s+/g, ' ').trim();
+    }
+
+    const lines = normalized
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+/g, ' ').trim());
+
+    const compact = [];
+    for (const line of lines) {
+      if (!line) {
+        if (compact[compact.length - 1] !== '') {
+          compact.push('');
+        }
+      } else {
+        compact.push(line);
+      }
+    }
+
+    return compact.join('\n').trim();
+  };
+
+  const queryText = (selector, root = document, options) => {
+    const node = root?.querySelector(selector);
+    return readText(node, options);
+  };
+
+  const activeCard = document.querySelector('.job-card-wrap.active');
+  const detailBox = document.querySelector('.job-detail-box');
+  const detailHeader = document.querySelector('.job-detail-header');
+  const detailBody = document.querySelector('.job-detail-body');
+
+  if (!detailBox || !detailHeader || !detailBody) {
+    return { ok: false, error: 'No job detail panel found on this page.' };
+  }
+
+  const role = queryText('.job-name', detailHeader) || queryText('.job-name', activeCard || document);
+  const salaryFromCard = queryText('.job-salary', activeCard || document);
+  const salaryFromDetail = queryText('.job-salary', detailHeader);
+  const salaryRaw = [salaryFromCard, salaryFromDetail].find((value) => value && !containsPrivateUse(value)) || salaryFromCard || salaryFromDetail || '';
+
+  const companyRaw = queryText('.boss-name', activeCard || document) || queryText('.boss-info', activeCard || document);
+  const company = companyRaw.split('·')[0].trim();
+  const location = queryText('.tag-list li:first-child', detailHeader) || queryText('.company-location', activeCard || document) || '';
+
+  const activeJobHref = activeCard?.querySelector('a[href*="/job_detail/"]')?.href;
+  const detailJobHref = detailBox.querySelector('a.more-job-btn[href]')?.href;
+  const jobLink = normalizeJobUrl(activeJobHref || detailJobHref || window.location.href);
+
+  const detailBodyClone = detailBody.cloneNode(true);
+  detailBodyClone.querySelectorAll('.job-detail-operate, .job-boss-info, .job-address, .more-job-btn, .job-search-scan, style, script').forEach((node) => node.remove());
+  let jdText = readText(detailBodyClone, { preserveLines: true });
+  jdText = jdText
+    .replace(/^举报\n微信扫码分享\n?/u, '')
+    .replace(/^举报 微信扫码分享\s*/u, '')
+    .trim();
+
+  const salary = containsPrivateUse(salaryRaw) ? '' : salaryRaw;
+
+  if (!role || !jdText) {
+    return { ok: false, error: 'Could not find role or JD text.' };
+  }
+
+  return {
+    ok: true,
+    job: {
+      id: jobLink,
+      url: jobLink,
+      role,
+      company,
+      location,
+      salary,
+      salaryNeedsReview: Boolean(salaryRaw) && containsPrivateUse(salaryRaw),
+      salaryRaw,
+      jdText,
+      note: '',
+      capturedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function copyMarkdown() {
+  try {
+    const markdown = generateMarkdown(state.jobs);
+    await navigator.clipboard.writeText(markdown);
+    setStatus('Copied Markdown to clipboard.');
+  } catch {
+    setStatus('Could not copy Markdown.');
+  }
+}
+
+function exportJson() {
+  const blob = new Blob([JSON.stringify(state.jobs, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `opportunity-queue-${dateStamp()}.json`);
+  setStatus('Exported JSON.');
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function generateMarkdown(jobs) {
+  const lines = ['# Opportunity Queue', ''];
+
+  jobs.forEach((job, index) => {
+    const order = String(index + 1).padStart(3, '0');
+    lines.push(`### ${order} - ${job.company || 'Company'} - ${job.role || 'Role'}`);
+    lines.push(`- Link: ${job.url ? `[JD](${job.url})` : ''}`);
+    lines.push(`- Location: ${job.location || ''}`);
+    lines.push(`- Salary: ${job.salary || ''}`);
+    lines.push(`- Captured: ${formatDate(job.capturedAt)}`);
+    lines.push(`- Note: ${job.note || ''}`);
+    lines.push('');
+    lines.push('#### JD Text');
+    lines.push('```text');
+    lines.push((job.jdText || '').replace(/```/g, '`\u200b``'));
+    lines.push('```');
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+function formatDate(value) {
+  if (!value) return 'Unknown';
+  const date = new Date(value);
+  return date.toLocaleString();
+}
+
+function dateStamp() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

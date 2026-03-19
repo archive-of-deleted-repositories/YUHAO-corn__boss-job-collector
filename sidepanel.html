@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Opportunity Queue</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Boss helper</p>
+          <h1>Opportunity Queue</h1>
+          <p class="subcopy">Capture jobs quickly, rank them, and review JD details without copy/paste.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="captureBtn" class="primary-btn">Capture Current Job</button>
+          <div class="inline-actions">
+            <button id="copyMarkdownBtn" class="ghost-btn">Copy Markdown</button>
+            <button id="exportJsonBtn" class="ghost-btn">Export JSON</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="status-bar">
+        <span id="statusText">Ready.</span>
+        <span id="countBadge" class="count-badge">0 saved</span>
+      </section>
+
+      <main>
+        <div id="emptyState" class="empty-state">
+          <div class="empty-icon">Q</div>
+          <h2>No jobs captured yet</h2>
+          <p>Open a BOSS listing page, click one job, then use <strong>Capture Current Job</strong>.</p>
+        </div>
+        <div id="jobList" class="job-list"></div>
+      </main>
+    </div>
+
+    <template id="jobCardTemplate">
+      <details class="job-card" draggable="true">
+        <summary class="job-summary">
+          <div class="drag-handle" title="Drag to reorder">::</div>
+
+          <div class="summary-main">
+            <h3 class="job-role"></h3>
+            <div class="summary-company"></div>
+            <div class="summary-location"></div>
+          </div>
+
+          <div class="summary-right">
+            <span class="job-salary badge"></span>
+            <div class="menu-wrap">
+              <button type="button" class="menu-trigger" aria-label="Card menu">...</button>
+              <div class="menu-panel" hidden>
+                <button type="button" class="menu-open">Open source</button>
+                <button type="button" class="menu-edit">Edit fields</button>
+                <button type="button" class="menu-delete">Delete</button>
+              </div>
+            </div>
+          </div>
+        </summary>
+
+        <div class="card-content">
+          <article class="jd-block">
+            <div class="section-head">
+              <h4>JD</h4>
+              <button type="button" class="copy-jd-btn">Copy JD</button>
+            </div>
+            <pre class="jd-text"></pre>
+          </article>
+
+          <section class="editor-panel is-hidden">
+            <label>
+              <span>Role</span>
+              <input data-field="role" />
+            </label>
+            <label>
+              <span>Company</span>
+              <input data-field="company" />
+            </label>
+            <label>
+              <span>Location</span>
+              <input data-field="location" />
+            </label>
+            <label>
+              <span>Salary</span>
+              <input data-field="salary" placeholder="Optional" />
+            </label>
+            <label class="full-width">
+              <span>URL</span>
+              <input data-field="url" />
+            </label>
+            <label class="full-width">
+              <span>Note</span>
+              <textarea data-field="note" rows="3" placeholder="Optional note"></textarea>
+            </label>
+          </section>
+
+          <div class="footer-meta">
+            <span class="captured-at"></span>
+            <span class="review-flag"></span>
+          </div>
+        </div>
+      </details>
+    </template>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
