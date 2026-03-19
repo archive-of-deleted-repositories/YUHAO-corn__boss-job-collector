@@ -1239,7 +1239,7 @@ async function copyMarkdown() {
 }
 
 function exportJson() {
-  const exportableJobs = state.jobs.map(stripLegacySalaryFields);
+  const exportableJobs = state.jobs.map((job) => buildExportJob(job));
   const blob = new Blob([JSON.stringify(exportableJobs, null, 2)], { type: "application/json" });
   downloadBlob(blob, `opportunity-queue-${dateStamp()}.json`);
   setStatus("Exported JSON.");
@@ -1258,6 +1258,7 @@ function generateMarkdown(jobs) {
   const lines = ["# Opportunity Queue", ""];
 
   jobs.forEach((job, index) => {
+    const exportJdText = getExportJdText(job);
     const order = String(index + 1).padStart(3, "0");
     lines.push(`### ${order} - ${job.company || "Company"} - ${job.role || "Role"}`);
     lines.push(`- Link: ${job.url ? `[JD](${job.url})` : ""}`);
@@ -1267,12 +1268,33 @@ function generateMarkdown(jobs) {
     lines.push("");
     lines.push("#### JD Text");
     lines.push("```text");
-    lines.push((job.jdText || "").replace(/```/g, "`\u200b``"));
+    lines.push(exportJdText.replace(/```/g, "`\u200b``"));
     lines.push("```");
     lines.push("");
   });
 
   return lines.join("\n");
+}
+
+function getExportJdText(job) {
+  return getStructuredForJob(job) || job.jdText || "";
+}
+
+function buildExportJob(job) {
+  const rawJob = stripLegacySalaryFields(job);
+  const jdTextRaw = rawJob.jdText || "";
+  const jdTextFormatted = getStructuredForJob(job);
+
+  if (!jdTextFormatted) {
+    return rawJob;
+  }
+
+  return {
+    ...rawJob,
+    jdText: jdTextFormatted,
+    jdTextRaw,
+    jdTextFormatted,
+  };
 }
 
 function formatDate(value) {
