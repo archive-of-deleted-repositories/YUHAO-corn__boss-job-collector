@@ -40,9 +40,10 @@ const readerEmpty = document.getElementById("readerEmpty");
 const readerCard = document.getElementById("readerCard");
 const readerRole = document.getElementById("readerRole");
 const readerMeta = document.getElementById("readerMeta");
+const readerFormatHint = document.getElementById("readerFormatHint");
+const readerFormatHintText = document.getElementById("readerFormatHintText");
+const readerFormatRetryBtn = document.getElementById("readerFormatRetryBtn");
 const readerJdText = document.getElementById("readerJdText");
-const readerRawBtn = document.getElementById("readerRawBtn");
-const readerStructuredBtn = document.getElementById("readerStructuredBtn");
 const readerCopyBtn = document.getElementById("readerCopyBtn");
 const readerOpenBtn = document.getElementById("readerOpenBtn");
 const readerEditorPanel = document.getElementById("readerEditorPanel");
@@ -53,11 +54,10 @@ const state = {
   dragId: null,
   selectedJobId: null,
   editorJobId: null,
-  readerMode: "raw",
   formatterConfig: createDefaultFormatterConfig(),
   structuredCache: {},
   pendingStructuredJobs: new Set(),
-  failedStructuredSignatures: {},
+  formatterFailures: {},
 };
 
 init();
@@ -81,8 +81,7 @@ function bindTopLevelEvents() {
 
   readerCopyBtn.addEventListener("click", copySelectedJd);
   readerOpenBtn.addEventListener("click", openSelectedSource);
-  readerRawBtn.addEventListener("click", () => switchReaderMode("raw"));
-  readerStructuredBtn.addEventListener("click", () => switchReaderMode("structured"));
+  readerFormatRetryBtn.addEventListener("click", retrySelectedFormatting);
 
   readerFields.forEach((input) => {
     input.addEventListener("change", handleReaderFieldChange);
@@ -248,8 +247,9 @@ async function saveFormatterConfigFromForm(event) {
   const config = getFormatterConfigFromForm();
 
   state.formatterConfig = config;
+  state.structuredCache = {};
   state.pendingStructuredJobs.clear();
-  state.failedStructuredSignatures = {};
+  state.formatterFailures = {};
   await chrome.storage.local.set({ [FORMATTER_CONFIG_KEY]: config });
   closeFormatterSettingsPanel();
   render();
@@ -283,7 +283,7 @@ async function testFormatterConnection() {
 
   try {
     await pingFormatter(config);
-    setFormatterTestStatus("Connection OK. You can save and use Structured mode.", "success");
+    setFormatterTestStatus("Connection OK. Formatter can return polished plain text.", "success");
   } catch (error) {
     const message = error?.message ? String(error.message) : "Unknown error.";
     setFormatterTestStatus(`Failed: ${message}`, "error");
@@ -293,12 +293,22 @@ async function testFormatterConnection() {
 }
 
 async function pingFormatter(config) {
-  const prompt = '请仅返回纯文本 "ok"。';
+  const prompt = [
+    "这是从网页抓下来的原始JD文本，可能存在换行混乱、空行不合理、编号不整齐、标题粘连等排版问题。",
+    "请在不改写事实信息的前提下，只做必要的排版整理。",
+    "如果原文已经清晰，就尽量少改。",
+    "只输出整理后的纯文本，不要解释，不要JSON，不要Markdown代码块。",
+    "原始文本：",
+    "岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。",
+  ].join("\n");
+
   if (config.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
-    await formatJdWithAnthropic(prompt, config);
+    const formatted = await formatJdWithAnthropic(prompt, config);
+    if (!formatted) throw new Error("Model returned empty text.");
     return;
   }
-  await formatJdWithOpenAI(prompt, config);
+  const formatted = await formatJdWithOpenAI(prompt, config);
+  if (!formatted) throw new Error("Model returned empty text.");
 }
 
 async function saveJobs() {
@@ -492,7 +502,7 @@ function renderReader(job) {
     readerCard.classList.add("is-hidden");
     readerCopyBtn.disabled = true;
     readerOpenBtn.disabled = true;
-    updateReaderModeControls(null);
+    updateReaderFormatHint(null);
     return;
   }
 
@@ -501,7 +511,7 @@ function renderReader(job) {
 
   readerRole.textContent = job.role || "Untitled role";
   readerMeta.textContent = formatReaderMeta(job);
-  updateReaderModeControls(job);
+  updateReaderFormatHint(job);
   const displayText = getReaderDisplayText(job);
   readerJdText.textContent = displayText;
 
@@ -521,64 +531,53 @@ function renderReader(job) {
   maybeFormatStructured(job);
 }
 
-function switchReaderMode(mode) {
-  if (mode === "structured" && !canUseFormatter()) {
+function updateReaderFormatHint(job) {
+  if (!job || !canUseFormatter() || !job.jdText?.trim()) {
+    readerFormatHint.classList.add("is-hidden");
+    readerFormatHint.classList.remove("is-error");
+    readerFormatRetryBtn.hidden = true;
+    readerFormatHintText.textContent = "";
     return;
   }
 
-  state.readerMode = mode;
-  const selectedJob = getSelectedJob();
-  renderReader(selectedJob);
-  if (mode === "structured" && selectedJob) {
-    maybeFormatStructured(selectedJob, { force: true });
-  }
-}
-
-function updateReaderModeControls(job) {
-  const hasStructured = Boolean(job && getStructuredForJob(job));
+  const hasStructured = Boolean(getStructuredForJob(job));
   const isPending = Boolean(job && state.pendingStructuredJobs.has(job.id));
-  const hasFailure = Boolean(job && hasStructuredFailure(job));
-  const hasJdText = Boolean((job?.jdText || "").trim());
-  const shouldShowStructured = Boolean(job && canUseFormatter() && (hasJdText || hasStructured));
+  const failure = getFormatterFailure(job);
 
-  readerStructuredBtn.hidden = !shouldShowStructured;
-  readerStructuredBtn.disabled = isPending || !canUseFormatter();
-  if (hasStructured) {
-    readerStructuredBtn.textContent = "Structured";
-  } else if (isPending) {
-    readerStructuredBtn.textContent = "Formatting...";
-  } else if (hasFailure) {
-    readerStructuredBtn.textContent = "Retry";
-  } else {
-    readerStructuredBtn.textContent = "Format";
-  }
-
-  if (!shouldShowStructured && state.readerMode === "structured") {
-    state.readerMode = "raw";
-  }
-
-  const structuredActive = state.readerMode === "structured" && hasStructured;
-  const rawActive = !structuredActive;
-  readerRawBtn.classList.toggle("is-active", rawActive);
-  readerRawBtn.setAttribute("aria-pressed", rawActive ? "true" : "false");
-
-  if (!shouldShowStructured) {
+  if (isPending) {
+    readerFormatHint.classList.add("is-hidden");
+    readerFormatHint.classList.remove("is-error");
+    readerFormatRetryBtn.hidden = true;
+    readerFormatHintText.textContent = "";
     return;
   }
 
-  readerStructuredBtn.classList.toggle("is-active", structuredActive);
-  readerStructuredBtn.setAttribute("aria-pressed", structuredActive ? "true" : "false");
+  if (failure) {
+    readerFormatHint.classList.remove("is-hidden");
+    readerFormatHint.classList.add("is-error");
+    readerFormatRetryBtn.hidden = false;
+    readerFormatHintText.textContent = `Formatting failed: ${failure.message}`;
+    return;
+  }
+
+  if (hasStructured) {
+    readerFormatHint.classList.add("is-hidden");
+    readerFormatHint.classList.remove("is-error");
+    readerFormatRetryBtn.hidden = true;
+    readerFormatHintText.textContent = "";
+    return;
+  }
+
+  readerFormatHint.classList.add("is-hidden");
+  readerFormatHint.classList.remove("is-error");
+  readerFormatRetryBtn.hidden = true;
+  readerFormatHintText.textContent = "";
 }
 
 function getReaderDisplayText(job) {
   if (!job) return "";
-
-  if (state.readerMode === "structured") {
-    const structured = getStructuredForJob(job);
-    if (structured) return structured;
-  }
-
-  return job.jdText || "No JD captured.";
+  const structured = getStructuredForJob(job);
+  return structured || job.jdText || "No JD captured.";
 }
 
 async function handleReaderFieldChange(event) {
@@ -615,8 +614,10 @@ function getStructuredForJob(job) {
   return cached.signature === getJobSignature(job) ? cached.text : "";
 }
 
-function hasStructuredFailure(job) {
-  return state.failedStructuredSignatures[job.id] === getJobSignature(job);
+function getFormatterFailure(job) {
+  const failure = state.formatterFailures[job.id];
+  if (!failure) return null;
+  return failure.signature === getJobSignature(job) ? failure : null;
 }
 
 function maybeFormatStructured(job, { force = false } = {}) {
@@ -624,27 +625,32 @@ function maybeFormatStructured(job, { force = false } = {}) {
   if (!job.jdText?.trim()) return;
   if (getStructuredForJob(job)) return;
   if (state.pendingStructuredJobs.has(job.id)) return;
-  if (!force && hasStructuredFailure(job)) return;
+  if (!force && getFormatterFailure(job)) return;
 
   state.pendingStructuredJobs.add(job.id);
-  delete state.failedStructuredSignatures[job.id];
-  updateReaderModeControls(job);
+  delete state.formatterFailures[job.id];
+  updateReaderFormatHint(job);
 
   formatJdWithModel(job)
     .then((formattedText) => {
       if (!formattedText) {
-        state.failedStructuredSignatures[job.id] = getJobSignature(job);
+        state.formatterFailures[job.id] = {
+          signature: getJobSignature(job),
+          message: "Model returned empty text.",
+        };
         return;
       }
       state.structuredCache[job.id] = {
         signature: getJobSignature(job),
         text: formattedText,
       };
-      delete state.failedStructuredSignatures[job.id];
+      delete state.formatterFailures[job.id];
     })
-    .catch(() => {
-      // Keep silent fallback: user still has raw mode.
-      state.failedStructuredSignatures[job.id] = getJobSignature(job);
+    .catch((error) => {
+      state.formatterFailures[job.id] = {
+        signature: getJobSignature(job),
+        message: formatFailureMessage(error),
+      };
     })
     .finally(() => {
       state.pendingStructuredJobs.delete(job.id);
@@ -656,11 +662,12 @@ function maybeFormatStructured(job, { force = false } = {}) {
 
 async function formatJdWithModel(job) {
   const prompt = [
-    "你是JD排版助手。请将原始JD整理为结构化内容。",
-    "输出必须是严格JSON，不要额外解释。",
-    'JSON schema: {"overview":"", "responsibilities":[], "requirements":[], "highlights":[]}',
-    "数组内容是字符串，每条不超过40字。",
-    `JD原文:\n${job.jdText || ""}`,
+    "这是从网页抓下来的原始JD文本，可能有换行、空格、编号、段落拆分不合理的问题。",
+    "请在不改变事实信息的前提下，只做必要的排版整理，让它更清晰易读。",
+    "如果原文已经清晰，就尽量少改。",
+    "只输出整理后的纯文本，不要解释，不要JSON，不要Markdown代码块。",
+    "原始文本：",
+    job.jdText || "",
   ].join("\n");
 
   if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
@@ -703,8 +710,7 @@ async function formatJdWithOpenAI(prompt, formatterConfig) {
 
     const payload = await response.json();
     const outputText = extractModelOutputText(payload);
-    const parsed = parseModelJson(outputText);
-    return renderStructuredJd(parsed);
+    return sanitizeFormattedText(outputText);
   } finally {
     window.clearTimeout(timeout);
   }
@@ -741,8 +747,7 @@ async function formatJdWithAnthropic(prompt, formatterConfig) {
 
     const payload = await response.json();
     const outputText = extractAnthropicOutputText(payload);
-    const parsed = parseModelJson(outputText);
-    return renderStructuredJd(parsed);
+    return sanitizeFormattedText(outputText);
   } finally {
     window.clearTimeout(timeout);
   }
@@ -793,19 +798,6 @@ function extractModelOutputText(payload) {
   return typeof choiceText === "string" ? choiceText.trim() : "";
 }
 
-function parseModelJson(text) {
-  if (!text) return null;
-
-  const match = text.match(/\{[\s\S]*\}/u);
-  const jsonCandidate = match ? match[0] : text;
-
-  try {
-    return JSON.parse(jsonCandidate);
-  } catch {
-    return null;
-  }
-}
-
 function extractAnthropicOutputText(payload) {
   const content = Array.isArray(payload?.content) ? payload.content : [];
   const chunks = content
@@ -815,36 +807,26 @@ function extractAnthropicOutputText(payload) {
   return chunks.join("\n").trim();
 }
 
-function renderStructuredJd(parsed) {
-  if (!parsed || typeof parsed !== "object") {
-    return "";
-  }
+function sanitizeFormattedText(text) {
+  if (!text) return "";
+  return text
+    .replace(/^```[\w-]*\n?/u, "")
+    .replace(/\n?```$/u, "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
-  const cleanOverview = typeof parsed.overview === "string" ? parsed.overview.trim() : "";
-  const responsibilities = Array.isArray(parsed.responsibilities) ? parsed.responsibilities.map((item) => String(item).trim()).filter(Boolean) : [];
-  const requirements = Array.isArray(parsed.requirements) ? parsed.requirements.map((item) => String(item).trim()).filter(Boolean) : [];
-  const highlights = Array.isArray(parsed.highlights) ? parsed.highlights.map((item) => String(item).trim()).filter(Boolean) : [];
+function formatFailureMessage(error) {
+  const message = error?.message ? String(error.message) : "Unknown error.";
+  return message.replace(/\s+/g, " ").trim().slice(0, 120);
+}
 
-  const sections = [];
-
-  if (cleanOverview) {
-    sections.push(`Overview\n${cleanOverview}`);
-  }
-  if (responsibilities.length) {
-    sections.push(`Responsibilities\n${responsibilities.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
-  }
-  if (requirements.length) {
-    sections.push(`Requirements\n${requirements.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
-  }
-  if (highlights.length) {
-    sections.push(`Highlights\n${highlights.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
-  }
-
-  if (!sections.length) {
-    return "";
-  }
-
-  return sections.join("\n\n");
+function retrySelectedFormatting() {
+  const job = getSelectedJob();
+  if (!job) return;
+  maybeFormatStructured(job, { force: true });
 }
 
 async function copySelectedJd() {

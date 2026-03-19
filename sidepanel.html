@@ -95,10 +95,12 @@
               <div class="reader-heading">
                 <h2 id="readerRole"></h2>
                 <p id="readerMeta"></p>
+                <div id="readerFormatHint" class="reader-format-hint is-hidden">
+                  <span id="readerFormatHintText"></span>
+                  <button id="readerFormatRetryBtn" type="button" class="reader-format-retry-btn">Retry</button>
+                </div>
               </div>
               <div class="reader-actions">
-                <button id="readerRawBtn" type="button" class="reader-action-btn reader-mode-btn is-active" aria-pressed="true">Raw</button>
-                <button id="readerStructuredBtn" type="button" class="reader-action-btn reader-mode-btn" aria-pressed="false" hidden>Structured</button>
                 <button id="readerCopyBtn" type="button" class="reader-action-btn" title="Copy JD" aria-label="Copy JD">Copy</button>
                 <button id="readerOpenBtn" type="button" class="reader-action-btn" title="Open source" aria-label="Open source">Source</button>
               </div>

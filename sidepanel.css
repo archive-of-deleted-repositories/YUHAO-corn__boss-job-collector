@@ -761,6 +761,36 @@ textarea {
   text-overflow: ellipsis;
 }
 
+.reader-format-hint {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #5a6679;
+  min-height: 14px;
+}
+
+.reader-format-hint.is-hidden {
+  display: none;
+}
+
+.reader-format-hint.is-error {
+  color: #b23d4f;
+}
+
+.reader-format-retry-btn {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .reader-actions {
   display: flex;
   align-items: center;
@@ -794,20 +824,6 @@ textarea {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
-}
-
-.reader-mode-btn {
-  min-width: 64px;
-}
-
-.reader-mode-btn.is-active {
-  background: rgba(10, 149, 134, 0.15);
-  border-color: rgba(12, 163, 147, 0.45);
-  color: #0b7d70;
-}
-
-.reader-mode-btn:disabled {
-  opacity: 0.55;
 }
 
 .reader-jd-text {
