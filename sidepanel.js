@@ -764,7 +764,6 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
       },
       body: JSON.stringify({
         model: formatterConfig.model,
-        max_output_tokens: 500,
         input: [
           {
             role: "user",
@@ -791,6 +790,12 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
     }
 
     const payload = await response.json();
+    if (payload?.incomplete_details?.reason) {
+      logFormatterEvent("openai request:incomplete", {
+        ...context,
+        reason: payload.incomplete_details.reason,
+      });
+    }
     const outputText = extractModelOutputText(payload);
     const formatted = sanitizeFormattedText(outputText);
     if (!formatted) {
