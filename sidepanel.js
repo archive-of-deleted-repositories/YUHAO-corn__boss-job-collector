@@ -293,14 +293,7 @@ async function testFormatterConnection() {
 }
 
 async function pingFormatter(config) {
-  const prompt = [
-    "这是从网页抓下来的原始JD文本，可能存在换行混乱、空行不合理、编号不整齐、标题粘连等排版问题。",
-    "请在不改写事实信息的前提下，只做必要的排版整理。",
-    "如果原文已经清晰，就尽量少改。",
-    "只输出整理后的纯文本，不要解释，不要JSON，不要Markdown代码块。",
-    "原始文本：",
-    "岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。",
-  ].join("\n");
+  const prompt = buildFormatterPrompt("岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。");
 
   if (config.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
     const formatted = await formatJdWithAnthropic(prompt, config);
@@ -661,19 +654,25 @@ function maybeFormatStructured(job, { force = false } = {}) {
 }
 
 async function formatJdWithModel(job) {
-  const prompt = [
-    "这是从网页抓下来的原始JD文本，可能有换行、空格、编号、段落拆分不合理的问题。",
-    "请在不改变事实信息的前提下，只做必要的排版整理，让它更清晰易读。",
-    "如果原文已经清晰，就尽量少改。",
-    "只输出整理后的纯文本，不要解释，不要JSON，不要Markdown代码块。",
-    "原始文本：",
-    job.jdText || "",
-  ].join("\n");
+  const prompt = buildFormatterPrompt(job.jdText || "");
 
   if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
     return formatJdWithAnthropic(prompt, state.formatterConfig);
   }
   return formatJdWithOpenAI(prompt, state.formatterConfig);
+}
+
+function buildFormatterPrompt(rawText) {
+  return [
+    "这是从网页抓下来的原始JD文本，可能存在换行混乱、空行不合理、编号不整齐、标题粘连等排版问题。",
+    "请先判断是否真的需要整理。",
+    "如果原文已经清晰、自然、结构完整，请尽量保持原样返回，不要为了改而改。",
+    "如果原文确实排版差，请在不改变事实信息的前提下，只做必要的排版整理，让它更清晰易读。",
+    "不要补充信息，不要总结，不要重写内容，不要改写语气。",
+    "只输出最终纯文本，不要解释，不要JSON，不要Markdown代码块。",
+    "原始文本：",
+    rawText,
+  ].join("\n");
 }
 
 async function formatJdWithOpenAI(prompt, formatterConfig) {
