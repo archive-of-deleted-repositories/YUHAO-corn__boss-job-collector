@@ -52,9 +52,7 @@ textarea {
 }
 
 .toolbar,
-.job-card,
-.reader-card,
-.reader-empty {
+.job-card {
   border: 1px solid rgba(255, 255, 255, 0.78);
   background: var(--panel);
   box-shadow: var(--shadow);
@@ -428,25 +426,34 @@ textarea {
 .reader-pane {
   min-height: 0;
   display: grid;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
 }
 
 .reader-empty {
-  border-radius: 12px;
   display: grid;
   place-items: center;
   color: var(--muted);
   font-size: 12px;
-  padding: 12px;
+  padding: 8px 6px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .reader-card {
-  border-radius: 12px;
-  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 7px;
+  gap: 6px;
   min-height: 0;
   overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .reader-card.is-hidden {
@@ -462,7 +469,7 @@ textarea {
 
 .reader-heading h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
@@ -488,8 +495,8 @@ textarea {
   margin: 0;
   min-height: 0;
   border: 1px solid rgba(21, 33, 50, 0.1);
-  border-radius: 10px;
-  background: var(--panel-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
   padding: 8px;
   white-space: pre-wrap;
   line-height: 1.4;
