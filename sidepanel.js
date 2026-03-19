@@ -34,6 +34,7 @@ const formatterEndpointInput = document.getElementById("formatterEndpointInput")
 const formatterApiKeyInput = document.getElementById("formatterApiKeyInput");
 const formatterTestBtn = document.getElementById("formatterTestBtn");
 const formatterTestStatus = document.getElementById("formatterTestStatus");
+const formatterTestPreview = document.getElementById("formatterTestPreview");
 const workspace = document.getElementById("workspace");
 
 const readerEmpty = document.getElementById("readerEmpty");
@@ -259,6 +260,8 @@ async function saveFormatterConfigFromForm(event) {
 function clearFormatterTestStatus() {
   formatterTestStatus.textContent = "";
   formatterTestStatus.classList.remove("is-success", "is-error");
+  formatterTestPreview.textContent = "";
+  formatterTestPreview.classList.add("is-hidden");
 }
 
 function setFormatterTestStatus(message, type = "neutral") {
@@ -269,6 +272,12 @@ function setFormatterTestStatus(message, type = "neutral") {
   } else if (type === "error") {
     formatterTestStatus.classList.add("is-error");
   }
+}
+
+function setFormatterTestPreview(text) {
+  const content = String(text || "").trim();
+  formatterTestPreview.textContent = content;
+  formatterTestPreview.classList.toggle("is-hidden", !content);
 }
 
 async function testFormatterConnection() {
@@ -282,26 +291,46 @@ async function testFormatterConnection() {
   setFormatterTestStatus("Testing connection...", "neutral");
 
   try {
-    await pingFormatter(config);
-    setFormatterTestStatus("Connection OK. Formatter can return polished plain text.", "success");
+    const startedAt = performance.now();
+    const result = await pingFormatter(config);
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const scopeLabel = result.usedSelectedJob ? "selected JD" : "sample text";
+    const changeLabel = result.changed ? "changed" : "unchanged";
+    setFormatterTestStatus(`Test OK in ${elapsedMs}ms using ${scopeLabel} (${changeLabel}).`, "success");
+    setFormatterTestPreview(result.preview);
   } catch (error) {
     const message = error?.message ? String(error.message) : "Unknown error.";
     setFormatterTestStatus(`Failed: ${message}`, "error");
+    setFormatterTestPreview("");
   } finally {
     formatterTestBtn.disabled = false;
   }
 }
 
 async function pingFormatter(config) {
-  const prompt = buildFormatterPrompt("岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。");
+  const selectedJob = getSelectedJob();
+  const rawText =
+    selectedJob?.jdText?.trim() ||
+    "岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。";
+  const prompt = buildFormatterPrompt(rawText);
 
+  let formatted = "";
   if (config.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
-    const formatted = await formatJdWithAnthropic(prompt, config);
-    if (!formatted) throw new Error("Model returned empty text.");
-    return;
+    formatted = await formatJdWithAnthropic(prompt, config);
+  } else {
+    formatted = await formatJdWithOpenAI(prompt, config);
   }
-  const formatted = await formatJdWithOpenAI(prompt, config);
   if (!formatted) throw new Error("Model returned empty text.");
+
+  const normalizedRaw = normalizeComparableText(rawText);
+  const normalizedFormatted = normalizeComparableText(formatted);
+  const changed = normalizedRaw !== normalizedFormatted;
+
+  return {
+    usedSelectedJob: Boolean(selectedJob?.jdText?.trim()),
+    changed,
+    preview: formatted.slice(0, 320),
+  };
 }
 
 async function saveJobs() {
@@ -815,6 +844,10 @@ function sanitizeFormattedText(text) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function normalizeComparableText(text) {
+  return sanitizeFormattedText(text).replace(/\s+/g, " ").trim();
 }
 
 function formatFailureMessage(error) {

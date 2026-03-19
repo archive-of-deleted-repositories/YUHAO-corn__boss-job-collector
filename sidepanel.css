@@ -286,6 +286,24 @@ textarea {
   color: #b23d4f;
 }
 
+.settings-test-preview {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  border: 1px solid rgba(22, 35, 54, 0.1);
+  border-radius: 8px;
+  background: rgba(247, 251, 255, 0.92);
+  padding: 8px;
+  white-space: pre-wrap;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #445166;
+}
+
+.settings-test-preview.is-hidden {
+  display: none;
+}
+
 .settings-actions {
   display: flex;
   justify-content: space-between;
