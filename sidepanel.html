@@ -18,6 +18,47 @@
         <div class="toolbar-actions">
           <button id="copyMarkdownBtn" class="ghost-btn toolbar-btn">Copy MD</button>
           <button id="exportJsonBtn" class="ghost-btn toolbar-btn">Export JSON</button>
+          <div class="settings-wrap">
+            <button id="formatterSettingsBtn" class="ghost-btn toolbar-btn" type="button" aria-expanded="false">AI Format</button>
+            <section id="formatterSettingsPanel" class="settings-panel" hidden>
+              <form id="formatterSettingsForm" class="settings-form">
+                <label class="settings-checkbox">
+                  <input id="formatterEnabledInput" type="checkbox" />
+                  <span>Enable JD formatter</span>
+                </label>
+
+                <label>
+                  <span>Provider</span>
+                  <select id="formatterProviderInput">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Model</span>
+                  <input id="formatterModelInput" type="text" placeholder="Model name" autocomplete="off" />
+                </label>
+
+                <label>
+                  <span>Endpoint / Base URL</span>
+                  <input id="formatterEndpointInput" type="text" placeholder="https://api.openai.com/v1/responses" autocomplete="off" />
+                </label>
+
+                <label>
+                  <span>API Key</span>
+                  <input id="formatterApiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+                </label>
+
+                <p class="settings-note">Use OpenAI provider for OpenAI-compatible APIs (including Doubao Ark).</p>
+
+                <div class="settings-actions">
+                  <button id="formatterCloseBtn" type="button" class="ghost-btn settings-btn">Close</button>
+                  <button id="formatterSaveBtn" type="submit" class="primary-btn settings-btn">Save</button>
+                </div>
+              </form>
+            </section>
+          </div>
         </div>
       </header>
 
@@ -49,6 +90,8 @@
                 <p id="readerMeta"></p>
               </div>
               <div class="reader-actions">
+                <button id="readerRawBtn" type="button" class="reader-action-btn reader-mode-btn is-active" aria-pressed="true">Raw</button>
+                <button id="readerStructuredBtn" type="button" class="reader-action-btn reader-mode-btn" aria-pressed="false" hidden>Structured</button>
                 <button id="readerCopyBtn" type="button" class="reader-action-btn" title="Copy JD" aria-label="Copy JD">Copy</button>
                 <button id="readerOpenBtn" type="button" class="reader-action-btn" title="Open source" aria-label="Open source">Source</button>
               </div>

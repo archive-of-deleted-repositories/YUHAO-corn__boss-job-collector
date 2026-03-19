@@ -1,4 +1,19 @@
 const STORAGE_KEY = "opportunityQueueJobs";
+const FORMATTER_CONFIG_KEY = "opportunityQueueJdFormatterConfig";
+const FORMATTER_PROVIDERS = {
+  OPENAI: "openai",
+  ANTHROPIC: "anthropic",
+};
+const FORMATTER_DEFAULTS = {
+  [FORMATTER_PROVIDERS.OPENAI]: {
+    model: "gpt-4.1-mini",
+    endpoint: "https://api.openai.com/v1/responses",
+  },
+  [FORMATTER_PROVIDERS.ANTHROPIC]: {
+    model: "claude-3-5-haiku-latest",
+    endpoint: "https://api.anthropic.com/v1/messages",
+  },
+};
 
 const statusText = document.getElementById("statusText");
 const countBadge = document.getElementById("countBadge");
@@ -8,6 +23,15 @@ const template = document.getElementById("jobCardTemplate");
 const captureBtn = document.getElementById("captureBtn");
 const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
+const formatterSettingsBtn = document.getElementById("formatterSettingsBtn");
+const formatterSettingsPanel = document.getElementById("formatterSettingsPanel");
+const formatterSettingsForm = document.getElementById("formatterSettingsForm");
+const formatterCloseBtn = document.getElementById("formatterCloseBtn");
+const formatterEnabledInput = document.getElementById("formatterEnabledInput");
+const formatterProviderInput = document.getElementById("formatterProviderInput");
+const formatterModelInput = document.getElementById("formatterModelInput");
+const formatterEndpointInput = document.getElementById("formatterEndpointInput");
+const formatterApiKeyInput = document.getElementById("formatterApiKeyInput");
 const workspace = document.getElementById("workspace");
 
 const readerEmpty = document.getElementById("readerEmpty");
@@ -15,6 +39,8 @@ const readerCard = document.getElementById("readerCard");
 const readerRole = document.getElementById("readerRole");
 const readerMeta = document.getElementById("readerMeta");
 const readerJdText = document.getElementById("readerJdText");
+const readerRawBtn = document.getElementById("readerRawBtn");
+const readerStructuredBtn = document.getElementById("readerStructuredBtn");
 const readerCopyBtn = document.getElementById("readerCopyBtn");
 const readerOpenBtn = document.getElementById("readerOpenBtn");
 const readerEditorPanel = document.getElementById("readerEditorPanel");
@@ -25,12 +51,17 @@ const state = {
   dragId: null,
   selectedJobId: null,
   editorJobId: null,
+  readerMode: "raw",
+  formatterConfig: createDefaultFormatterConfig(),
+  structuredCache: {},
+  pendingStructuredJobs: new Set(),
+  failedStructuredSignatures: {},
 };
 
 init();
 
 async function init() {
-  await loadJobs();
+  await Promise.all([loadJobs(), loadFormatterConfig()]);
   ensureValidSelection();
   bindTopLevelEvents();
   render();
@@ -40,9 +71,15 @@ function bindTopLevelEvents() {
   captureBtn.addEventListener("click", captureCurrentJob);
   copyMarkdownBtn.addEventListener("click", copyMarkdown);
   exportJsonBtn.addEventListener("click", exportJson);
+  formatterSettingsBtn.addEventListener("click", toggleFormatterSettingsPanel);
+  formatterCloseBtn.addEventListener("click", () => closeFormatterSettingsPanel());
+  formatterSettingsForm.addEventListener("submit", saveFormatterConfigFromForm);
+  formatterProviderInput.addEventListener("change", handleProviderChange);
 
   readerCopyBtn.addEventListener("click", copySelectedJd);
   readerOpenBtn.addEventListener("click", openSelectedSource);
+  readerRawBtn.addEventListener("click", () => switchReaderMode("raw"));
+  readerStructuredBtn.addEventListener("click", () => switchReaderMode("structured"));
 
   readerFields.forEach((input) => {
     input.addEventListener("change", handleReaderFieldChange);
@@ -52,11 +89,15 @@ function bindTopLevelEvents() {
     if (!event.target.closest(".menu-wrap")) {
       closeAllMenus();
     }
+    if (!event.target.closest(".settings-wrap")) {
+      closeFormatterSettingsPanel();
+    }
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeAllMenus();
+      closeFormatterSettingsPanel();
     }
   });
 }
@@ -71,6 +112,25 @@ function closeAllMenus() {
   document.querySelectorAll('.menu-trigger[aria-expanded="true"]').forEach((trigger) => {
     trigger.setAttribute("aria-expanded", "false");
   });
+}
+
+function toggleFormatterSettingsPanel(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const shouldOpen = formatterSettingsPanel.hidden;
+  if (!shouldOpen) {
+    closeFormatterSettingsPanel();
+    return;
+  }
+
+  syncFormatterConfigToForm();
+  formatterSettingsPanel.hidden = false;
+  formatterSettingsBtn.setAttribute("aria-expanded", "true");
+}
+
+function closeFormatterSettingsPanel() {
+  formatterSettingsPanel.hidden = true;
+  formatterSettingsBtn.setAttribute("aria-expanded", "false");
 }
 
 async function loadJobs() {
@@ -91,6 +151,101 @@ async function loadJobs() {
   });
 
   state.jobs = Array.from(deduped.values());
+}
+
+async function loadFormatterConfig() {
+  const stored = await chrome.storage.local.get(FORMATTER_CONFIG_KEY);
+  const config = stored[FORMATTER_CONFIG_KEY];
+
+  if (!config || typeof config !== "object") {
+    return;
+  }
+
+  const provider = normalizeProvider(config.provider);
+  const defaults = getFormatterDefaults(provider);
+  state.formatterConfig = {
+    enabled: Boolean(config.enabled),
+    provider,
+    apiKey: typeof config.apiKey === "string" ? config.apiKey.trim() : "",
+    model: typeof config.model === "string" && config.model.trim() ? config.model.trim() : defaults.model,
+    endpoint: normalizeFormatterEndpoint(provider, typeof config.endpoint === "string" ? config.endpoint.trim() : defaults.endpoint),
+  };
+}
+
+function createDefaultFormatterConfig() {
+  const provider = FORMATTER_PROVIDERS.OPENAI;
+  const defaults = getFormatterDefaults(provider);
+  return {
+    enabled: false,
+    provider,
+    apiKey: "",
+    model: defaults.model,
+    endpoint: defaults.endpoint,
+  };
+}
+
+function getFormatterDefaults(provider) {
+  return FORMATTER_DEFAULTS[normalizeProvider(provider)] || FORMATTER_DEFAULTS[FORMATTER_PROVIDERS.OPENAI];
+}
+
+function normalizeProvider(provider) {
+  return provider === FORMATTER_PROVIDERS.ANTHROPIC ? FORMATTER_PROVIDERS.ANTHROPIC : FORMATTER_PROVIDERS.OPENAI;
+}
+
+function normalizeFormatterEndpoint(provider, rawEndpoint) {
+  const normalizedProvider = normalizeProvider(provider);
+  const defaults = getFormatterDefaults(normalizedProvider);
+  const trimmed = String(rawEndpoint || "").trim().replace(/\/+$/u, "");
+  if (!trimmed) return defaults.endpoint;
+
+  if (normalizedProvider === FORMATTER_PROVIDERS.ANTHROPIC) {
+    if (/\/messages$/u.test(trimmed)) return trimmed;
+    if (/\/v1$/u.test(trimmed)) return `${trimmed}/messages`;
+    return `${trimmed}/v1/messages`;
+  }
+
+  if (/\/responses$/u.test(trimmed)) return trimmed;
+  if (/\/(v\d+|api\/v\d+)$/u.test(trimmed)) return `${trimmed}/responses`;
+  return `${trimmed}/v1/responses`;
+}
+
+function syncFormatterConfigToForm() {
+  formatterEnabledInput.checked = Boolean(state.formatterConfig.enabled);
+  formatterProviderInput.value = normalizeProvider(state.formatterConfig.provider);
+  formatterModelInput.value = state.formatterConfig.model || "";
+  formatterEndpointInput.value = state.formatterConfig.endpoint || "";
+  formatterApiKeyInput.value = state.formatterConfig.apiKey || "";
+}
+
+function handleProviderChange() {
+  const provider = normalizeProvider(formatterProviderInput.value);
+  const defaults = getFormatterDefaults(provider);
+  formatterProviderInput.value = provider;
+  formatterModelInput.value = defaults.model;
+  formatterEndpointInput.value = defaults.endpoint;
+}
+
+async function saveFormatterConfigFromForm(event) {
+  event.preventDefault();
+
+  const provider = normalizeProvider(formatterProviderInput.value);
+  const model = formatterModelInput.value.trim() || getFormatterDefaults(provider).model;
+  const endpoint = normalizeFormatterEndpoint(provider, formatterEndpointInput.value.trim());
+  const config = {
+    enabled: Boolean(formatterEnabledInput.checked),
+    provider,
+    apiKey: formatterApiKeyInput.value.trim(),
+    model,
+    endpoint,
+  };
+
+  state.formatterConfig = config;
+  state.pendingStructuredJobs.clear();
+  state.failedStructuredSignatures = {};
+  await chrome.storage.local.set({ [FORMATTER_CONFIG_KEY]: config });
+  closeFormatterSettingsPanel();
+  render();
+  setStatus("Formatter settings saved.");
 }
 
 async function saveJobs() {
@@ -284,6 +439,7 @@ function renderReader(job) {
     readerCard.classList.add("is-hidden");
     readerCopyBtn.disabled = true;
     readerOpenBtn.disabled = true;
+    updateReaderModeControls(null);
     return;
   }
 
@@ -292,9 +448,11 @@ function renderReader(job) {
 
   readerRole.textContent = job.role || "Untitled role";
   readerMeta.textContent = formatReaderMeta(job);
-  readerJdText.textContent = job.jdText || "No JD captured.";
+  updateReaderModeControls(job);
+  const displayText = getReaderDisplayText(job);
+  readerJdText.textContent = displayText;
 
-  readerCopyBtn.disabled = !job.jdText;
+  readerCopyBtn.disabled = !displayText || displayText === "No JD captured.";
   readerOpenBtn.disabled = !job.url;
 
   const isEditorOpen = state.editorJobId === job.id;
@@ -306,6 +464,63 @@ function renderReader(job) {
       input.value = job[field] || "";
     });
   }
+
+  maybeFormatStructured(job);
+}
+
+function switchReaderMode(mode) {
+  if (mode === "structured" && !canUseFormatter()) {
+    return;
+  }
+
+  state.readerMode = mode;
+  renderReader(getSelectedJob());
+}
+
+function updateReaderModeControls(job) {
+  const hasStructured = Boolean(job && getStructuredForJob(job));
+  const isPending = Boolean(job && state.pendingStructuredJobs.has(job.id));
+  const hasFailure = Boolean(job && hasStructuredFailure(job));
+  const shouldShowStructured = Boolean(job && canUseFormatter() && ((job.jdText || "").trim() || hasStructured));
+
+  readerStructuredBtn.hidden = !shouldShowStructured;
+  readerStructuredBtn.disabled = !hasStructured;
+  if (hasStructured) {
+    readerStructuredBtn.textContent = "Structured";
+  } else if (isPending) {
+    readerStructuredBtn.textContent = "Formatting...";
+  } else if (hasFailure) {
+    readerStructuredBtn.textContent = "Unavailable";
+  } else {
+    readerStructuredBtn.textContent = "Structured";
+  }
+
+  if (!shouldShowStructured && state.readerMode === "structured") {
+    state.readerMode = "raw";
+  }
+
+  const rawActive = state.readerMode !== "structured";
+  readerRawBtn.classList.toggle("is-active", rawActive);
+  readerRawBtn.setAttribute("aria-pressed", rawActive ? "true" : "false");
+
+  if (!shouldShowStructured) {
+    return;
+  }
+
+  const structuredActive = state.readerMode === "structured";
+  readerStructuredBtn.classList.toggle("is-active", structuredActive);
+  readerStructuredBtn.setAttribute("aria-pressed", structuredActive ? "true" : "false");
+}
+
+function getReaderDisplayText(job) {
+  if (!job) return "";
+
+  if (state.readerMode === "structured") {
+    const structured = getStructuredForJob(job);
+    if (structured) return structured;
+  }
+
+  return job.jdText || "No JD captured.";
 }
 
 async function handleReaderFieldChange(event) {
@@ -322,14 +537,244 @@ async function handleReaderFieldChange(event) {
   setStatus("Saved edits.");
 }
 
+function canUseFormatter() {
+  return Boolean(
+    state.formatterConfig.enabled &&
+      state.formatterConfig.apiKey &&
+      state.formatterConfig.model &&
+      state.formatterConfig.endpoint &&
+      state.formatterConfig.provider
+  );
+}
+
+function getJobSignature(job) {
+  return `${job.id || ""}|${job.role || ""}|${job.jdText || ""}`;
+}
+
+function getStructuredForJob(job) {
+  const cached = state.structuredCache[job.id];
+  if (!cached) return "";
+  return cached.signature === getJobSignature(job) ? cached.text : "";
+}
+
+function hasStructuredFailure(job) {
+  return state.failedStructuredSignatures[job.id] === getJobSignature(job);
+}
+
+function maybeFormatStructured(job) {
+  if (!job || !canUseFormatter()) return;
+  if (!job.jdText?.trim()) return;
+  if (getStructuredForJob(job)) return;
+  if (state.pendingStructuredJobs.has(job.id)) return;
+  if (hasStructuredFailure(job)) return;
+
+  state.pendingStructuredJobs.add(job.id);
+  delete state.failedStructuredSignatures[job.id];
+  updateReaderModeControls(job);
+
+  formatJdWithModel(job)
+    .then((formattedText) => {
+      if (!formattedText) return;
+      state.structuredCache[job.id] = {
+        signature: getJobSignature(job),
+        text: formattedText,
+      };
+      delete state.failedStructuredSignatures[job.id];
+    })
+    .catch(() => {
+      // Keep silent fallback: user still has raw mode.
+      state.failedStructuredSignatures[job.id] = getJobSignature(job);
+    })
+    .finally(() => {
+      state.pendingStructuredJobs.delete(job.id);
+      if (state.selectedJobId === job.id) {
+        renderReader(job);
+      }
+    });
+}
+
+async function formatJdWithModel(job) {
+  const prompt = [
+    "你是JD排版助手。请将原始JD整理为结构化内容。",
+    "输出必须是严格JSON，不要额外解释。",
+    'JSON schema: {"overview":"", "responsibilities":[], "requirements":[], "highlights":[]}',
+    "数组内容是字符串，每条不超过40字。",
+    `JD原文:\n${job.jdText || ""}`,
+  ].join("\n");
+
+  if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
+    return formatJdWithAnthropic(prompt);
+  }
+  return formatJdWithOpenAI(prompt);
+}
+
+async function formatJdWithOpenAI(prompt) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, state.formatterConfig.endpoint), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${state.formatterConfig.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: state.formatterConfig.model,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Formatter request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const outputText = extractModelOutputText(payload);
+    const parsed = parseModelJson(outputText);
+    return renderStructuredJd(parsed);
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function formatJdWithAnthropic(prompt) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, state.formatterConfig.endpoint), {
+      method: "POST",
+      headers: {
+        "x-api-key": state.formatterConfig.apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: state.formatterConfig.model,
+        max_tokens: 1200,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Formatter request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const outputText = extractAnthropicOutputText(payload);
+    const parsed = parseModelJson(outputText);
+    return renderStructuredJd(parsed);
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function extractModelOutputText(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const outputChunks = [];
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  output.forEach((item) => {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    content.forEach((node) => {
+      if (typeof node?.text === "string" && node.text.trim()) {
+        outputChunks.push(node.text.trim());
+      }
+    });
+  });
+
+  if (outputChunks.length) {
+    return outputChunks.join("\n");
+  }
+
+  const choiceText = payload?.choices?.[0]?.message?.content;
+  return typeof choiceText === "string" ? choiceText.trim() : "";
+}
+
+function parseModelJson(text) {
+  if (!text) return null;
+
+  const match = text.match(/\{[\s\S]*\}/u);
+  const jsonCandidate = match ? match[0] : text;
+
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch {
+    return null;
+  }
+}
+
+function extractAnthropicOutputText(payload) {
+  const content = Array.isArray(payload?.content) ? payload.content : [];
+  const chunks = content
+    .filter((item) => item?.type === "text" && typeof item?.text === "string")
+    .map((item) => item.text.trim())
+    .filter(Boolean);
+  return chunks.join("\n").trim();
+}
+
+function renderStructuredJd(parsed) {
+  if (!parsed || typeof parsed !== "object") {
+    return "";
+  }
+
+  const cleanOverview = typeof parsed.overview === "string" ? parsed.overview.trim() : "";
+  const responsibilities = Array.isArray(parsed.responsibilities) ? parsed.responsibilities.map((item) => String(item).trim()).filter(Boolean) : [];
+  const requirements = Array.isArray(parsed.requirements) ? parsed.requirements.map((item) => String(item).trim()).filter(Boolean) : [];
+  const highlights = Array.isArray(parsed.highlights) ? parsed.highlights.map((item) => String(item).trim()).filter(Boolean) : [];
+
+  const sections = [];
+
+  if (cleanOverview) {
+    sections.push(`Overview\n${cleanOverview}`);
+  }
+  if (responsibilities.length) {
+    sections.push(`Responsibilities\n${responsibilities.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+  }
+  if (requirements.length) {
+    sections.push(`Requirements\n${requirements.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+  }
+  if (highlights.length) {
+    sections.push(`Highlights\n${highlights.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+  }
+
+  if (!sections.length) {
+    return "";
+  }
+
+  return sections.join("\n\n");
+}
+
 async function copySelectedJd() {
   const job = getSelectedJob();
-  if (!job?.jdText) {
+  const copyText = getReaderDisplayText(job).trim();
+  if (!copyText || copyText === "No JD captured.") {
     setStatus("No JD text to copy.");
     return;
   }
   try {
-    await navigator.clipboard.writeText(job.jdText);
+    await navigator.clipboard.writeText(copyText);
     setStatus("Copied JD text.");
   } catch {
     setStatus("Could not copy JD text.");

@@ -6,6 +6,33 @@ A tiny Chromium extension for capturing BOSS job postings into a sortable side p
 - See slice document: `UI_REDESIGN_SLICES.md`
 - Rollout rule: one slice per PR, merge in order to reduce regression risk
 
+## Optional JD Formatter
+Structured JD formatting is optional and disabled by default.
+
+Configure in side panel toolbar:
+- Click `AI Format`
+- Fill `Provider / Model / Endpoint / API Key`
+- Toggle `Enable JD formatter`
+- Click `Save`
+
+Supported providers:
+- `OpenAI` (Responses API format)
+- `Anthropic` (Messages API format)
+
+OpenAI-compatible providers (including Doubao Ark) should use `OpenAI` provider.
+
+Example (Doubao Ark, OpenAI-compatible):
+- Provider: `OpenAI`
+- Model: `doubao-seed-2-0-lite-260215`
+- Endpoint or Base URL:
+  - `https://ark.cn-beijing.volces.com/api/v3` (auto-normalized to `/responses`)
+  - or `https://ark.cn-beijing.volces.com/api/v3/responses`
+
+Storage key (for reference): `opportunityQueueJdFormatterConfig`
+
+Disable formatter by turning off `Enable JD formatter` and saving.
+
+
 ## MVP
 - Open the side panel from the extension toolbar icon
 - Click `Capture Current Job` on a BOSS page
