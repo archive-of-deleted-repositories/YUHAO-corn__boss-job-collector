@@ -1241,7 +1241,7 @@ async function copyMarkdown() {
 function exportJson() {
   const exportableJobs = state.jobs.map((job) => buildExportJob(job));
   const blob = new Blob([JSON.stringify(exportableJobs, null, 2)], { type: "application/json" });
-  downloadBlob(blob, `opportunity-queue-${dateStamp()}.json`);
+  downloadBlob(blob, `boss-job-collector-${dateStamp()}.json`);
   setStatus("Exported JSON.");
 }
 
@@ -1255,7 +1255,7 @@ function downloadBlob(blob, filename) {
 }
 
 function generateMarkdown(jobs) {
-  const lines = ["# Opportunity Queue", ""];
+  const lines = ["# BOSS Job Collector", ""];
 
   jobs.forEach((job, index) => {
     const exportJdText = getExportJdText(job);

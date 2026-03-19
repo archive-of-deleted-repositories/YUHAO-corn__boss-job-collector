@@ -1,0 +1,7 @@
+.DS_Store
+release/
+
+# Local scratch files kept outside the public repo
+xhs-p2-clean-background.html
+xhs-p2-flow-card.html
+xhs-p2-ops-flow.html

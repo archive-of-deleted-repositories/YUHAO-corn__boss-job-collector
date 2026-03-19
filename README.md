@@ -1,69 +1,113 @@
-# Opportunity Queue
+# BOSS Job Collector
 
-A tiny Chromium extension for capturing BOSS job postings into a sortable side panel.
+`BOSS 岗位收藏助手` 是一个面向 `BOSS 直聘` 的 Chromium 扩展，用来把岗位详情快速保存到侧边栏，方便后续筛选、排序、备注和导出。
 
-## Redesign Plan
-- See slice document: `UI_REDESIGN_SLICES.md`
-- Rollout rule: one slice per PR, merge in order to reduce regression risk
+这个仓库同时服务两类人：
+- 想直接安装使用的用户
+- 想自行修改或收录源码的开发者
 
-## Optional JD Formatter
-Structured JD formatting is optional and disabled by default.
+## 功能
 
-Configure in side panel toolbar:
-- Click `AI Format`
-- Fill `Provider / Model / Endpoint / API Key`
-- Toggle `Enable JD formatter`
-- Click `Save`
+- 在 `BOSS 直聘` 页面一键抓取当前岗位
+- 在侧边栏集中查看已保存岗位
+- 拖拽排序岗位优先级
+- 直接编辑岗位标题、公司、地点、备注
+- 导出为 `Markdown` 或 `JSON`
+- 可选启用 AI 格式化 JD 文本
 
-Supported providers:
-- `OpenAI` (Responses API format)
-- `Anthropic` (Messages API format)
+## 适用范围
 
-OpenAI-compatible providers (including Doubao Ark) should use `OpenAI` provider.
+- 浏览器：`Chrome`、`Edge`、其他兼容 Chromium 的浏览器
+- 网站：当前抓取逻辑面向 `https://www.zhipin.com/*`
 
-Example (Doubao Ark, OpenAI-compatible):
-- Provider: `OpenAI`
-- Model: `doubao-seed-2-0-lite-260215`
-- Endpoint or Base URL:
-  - `https://ark.cn-beijing.volces.com/api/v3` (auto-normalized to `/responses`)
-  - or `https://ark.cn-beijing.volces.com/api/v3/responses`
+## 快速安装
 
-Storage key (for reference): `opportunityQueueJdFormatterConfig`
+给急着使用的非技术用户，推荐直接从 `GitHub Releases` 下载打包好的安装包。
 
-Disable formatter by turning off `Enable JD formatter` and saving.
+1. 打开本项目的 `Releases` 页面
+2. 下载 `boss-job-collector-vX.Y.Z-unpacked.zip`
+3. 解压压缩包
+4. 在浏览器地址栏打开 `chrome://extensions`
+5. 打开右上角 `Developer mode`
+6. 点击 `Load unpacked`
+7. 选择解压后的文件夹
 
+注意：
+- 选择的必须是“里面直接能看到 `manifest.json` 的文件夹”
+- 不要直接选择 zip 文件
+- 不要误选上一级目录
 
-## MVP
-- Open the side panel from the extension toolbar icon
-- Click `Capture Current Job` on a BOSS page
-- Save current job into local storage
-- Reorder saved jobs by drag and drop
-- Edit captured fields inline
-- Export to Markdown or JSON
+更详细的图文说明见 [docs/install.md](docs/install.md)。
 
-## Current capture fields
-- `url`
-- `company`
-- `role`
-- `location`
-- `jdText`
-- `capturedAt`
+## 使用方法
 
-## Notes
-- Company is captured from the active card in the left list
-- Role, location, JD text, and job link are captured from the right detail panel
+1. 打开一个 `BOSS 直聘` 岗位详情页
+2. 点击浏览器工具栏中的扩展图标，打开侧边栏
+3. 点击 `Capture`
+4. 在侧边栏中查看、排序、编辑或导出岗位
 
-## Load locally
-1. Open `chrome://extensions`
-2. Enable `Developer mode`
-3. Click `Load unpacked`
-4. Select this folder: `/Users/godcorn/cursor/opportunity-queue`
-5. Click the extension icon to open the side panel
+## AI JD 格式化
 
-## Suggested Git Workflow (Slice by Slice)
-1. `git checkout -b slice/01-card-compact`
-2. Implement only the selected slice
-3. `git add . && git commit -m "feat: slice 01 card compact layout"`
-4. `git push -u origin slice/01-card-compact`
-5. `gh pr create --fill --base main --head slice/01-card-compact`
-6. Merge, then start next slice branch from updated `main`
+AI 格式化默认关闭。
+
+你可以在侧边栏的 `AI Format` 设置里填写：
+- Provider
+- Model
+- Endpoint / Base URL
+- API Key
+
+当前支持：
+- `OpenAI`
+- `Anthropic`
+- 兼容 OpenAI 接口格式的服务，例如豆包 Ark
+
+启用后，岗位 JD 文本会发送到你配置的模型服务进行格式化。隐私说明见 [PRIVACY.md](PRIVACY.md)。
+
+## 本地开发
+
+1. 克隆或下载本仓库
+2. 打开 `chrome://extensions`
+3. 打开 `Developer mode`
+4. 点击 `Load unpacked`
+5. 选择仓库根目录
+
+当前扩展入口文件：
+- [manifest.json](manifest.json)
+- [sidepanel.html](sidepanel.html)
+- [sidepanel.js](sidepanel.js)
+
+## 发布
+
+仓库内已经提供 release 打包脚本：
+
+```bash
+./scripts/build-release.sh
+```
+
+脚本会生成：
+- `release/boss-job-collector-vX.Y.Z/`
+- `release/boss-job-collector-vX.Y.Z-unpacked.zip`
+
+维护说明见 [docs/release.md](docs/release.md)。
+
+## 隐私
+
+- 岗位数据默认保存在浏览器本地 `chrome.storage.local`
+- 项目没有自建后端，也不会把你的数据上传到作者服务器
+- 只有当你主动开启 AI 格式化时，JD 文本和你填写的配置才会用于请求你指定的模型服务
+
+完整说明见 [PRIVACY.md](PRIVACY.md)。
+
+## 已知限制
+
+- 当前只适配 `BOSS 直聘` 的现有页面结构
+- 如果目标网站 DOM 结构变化，抓取逻辑可能失效
+- `Load unpacked` 安装方式适合临时使用；长期面向普通用户分发，后续更适合上架扩展商店
+
+## 版本记录
+
+版本变更见 [CHANGELOG.md](CHANGELOG.md)。
+
+## License
+
+本项目采用 [MIT License](LICENSE)。
