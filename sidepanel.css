@@ -342,15 +342,11 @@ textarea {
 
 .summary-right {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
-  gap: 5px;
+  gap: 4px;
   align-self: start;
-  margin-top: 1px;
-}
-
-.job-salary.is-empty {
-  display: none;
+  margin-top: 0;
 }
 
 .menu-wrap {
