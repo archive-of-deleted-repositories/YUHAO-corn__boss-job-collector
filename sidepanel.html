@@ -10,15 +10,17 @@
     <div class="app-shell">
       <header class="toolbar">
         <div class="toolbar-left">
-          <span class="toolbar-title">Opportunity Queue</span>
-          <span id="countBadge" class="count-badge">0 saved</span>
+          <div class="toolbar-headline">
+            <span class="toolbar-title">Opportunity Queue</span>
+            <span id="countBadge" class="count-badge">0 saved</span>
+          </div>
           <span id="statusText">Ready.</span>
         </div>
-        <button id="captureBtn" class="primary-btn">Capture</button>
-        <div class="toolbar-actions">
+        <div class="toolbar-controls">
+          <button id="captureBtn" class="primary-btn toolbar-btn toolbar-btn-primary">Capture</button>
           <button id="copyMarkdownBtn" class="ghost-btn toolbar-btn">Copy MD</button>
           <button id="exportJsonBtn" class="ghost-btn toolbar-btn">Export JSON</button>
-          <div class="settings-wrap">
+          <div class="settings-wrap toolbar-settings">
             <button id="formatterSettingsBtn" class="ghost-btn toolbar-btn" type="button" aria-expanded="false">AI Format</button>
             <section id="formatterSettingsPanel" class="settings-panel" hidden>
               <form id="formatterSettingsForm" class="settings-form">
