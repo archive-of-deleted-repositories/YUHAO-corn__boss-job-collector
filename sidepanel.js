@@ -90,6 +90,9 @@ function render() {
     const salary = fragment.querySelector('.job-salary');
     const company = fragment.querySelector('.summary-company');
     const location = fragment.querySelector('.summary-location');
+    const summaryDot = fragment.querySelector('.summary-dot');
+    const summaryCaptured = fragment.querySelector('.summary-captured');
+    const summarySource = fragment.querySelector('.summary-source');
     const capturedAt = fragment.querySelector('.captured-at');
     const reviewFlag = fragment.querySelector('.review-flag');
     const jdText = fragment.querySelector('.jd-text');
@@ -104,8 +107,15 @@ function render() {
 
     card.dataset.id = job.id;
     role.textContent = job.role || 'Untitled role';
+    role.title = role.textContent;
+
+    const hasCompany = Boolean(job.company);
+    const hasLocation = Boolean(job.location);
     company.textContent = job.company || 'Company pending';
     location.textContent = job.location || 'Location pending';
+    summaryDot.classList.toggle('is-hidden', !hasCompany || !hasLocation);
+    summaryCaptured.textContent = formatRelativeDate(job.capturedAt);
+    summarySource.textContent = formatSource(job.url);
 
     if (job.salary) {
       salary.classList.remove('is-empty');
@@ -408,6 +418,37 @@ function formatDate(value) {
   if (!value) return 'Unknown';
   const date = new Date(value);
   return date.toLocaleString();
+}
+
+function formatRelativeDate(value) {
+  if (!value) return 'Captured time unknown';
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return 'Captured time unknown';
+
+  const diff = Date.now() - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return 'Captured just now';
+  if (diff < hour) return `Captured ${Math.floor(diff / minute)}m ago`;
+  if (diff < day) return `Captured ${Math.floor(diff / hour)}h ago`;
+  if (diff < 7 * day) return `Captured ${Math.floor(diff / day)}d ago`;
+  return `Captured ${formatDate(value)}`;
+}
+
+function formatSource(url = '') {
+  if (!url) return 'UNKNOWN';
+
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./u, '');
+    if (hostname.includes('zhipin.com')) {
+      return 'BOSS';
+    }
+    return hostname;
+  } catch {
+    return 'UNKNOWN';
+  }
 }
 
 function dateStamp() {
