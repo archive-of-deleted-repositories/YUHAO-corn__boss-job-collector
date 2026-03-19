@@ -24,7 +24,7 @@
       <main id="workspace" class="workspace">
         <section class="queue-pane">
           <div class="pane-head">
-            <span>Queue</span>
+            <span>Saved Jobs</span>
           </div>
           <div class="queue-content">
             <div id="emptyState" class="empty-state">
@@ -38,7 +38,7 @@
 
         <section class="reader-pane">
           <div class="pane-head pane-head-viewing">
-            <span>Now Viewing</span>
+            <span>Detail</span>
           </div>
           <div id="readerEmpty" class="reader-empty">Select a card to read JD details.</div>
 
@@ -49,8 +49,8 @@
                 <p id="readerMeta"></p>
               </div>
               <div class="reader-actions">
-                <button id="readerCopyBtn" type="button" class="ghost-btn compact-btn">Copy JD</button>
-                <button id="readerOpenBtn" type="button" class="ghost-btn compact-btn">Open source</button>
+                <button id="readerCopyBtn" type="button" class="reader-action-btn" title="Copy JD" aria-label="Copy JD">Copy</button>
+                <button id="readerOpenBtn" type="button" class="reader-action-btn" title="Open source" aria-label="Open source">Source</button>
               </div>
             </header>
 
@@ -95,10 +95,6 @@
               <span class="summary-company"></span>
               <span class="summary-dot" aria-hidden="true">·</span>
               <span class="summary-location"></span>
-            </div>
-            <div class="summary-meta">
-              <span class="summary-captured"></span>
-              <span class="summary-source"></span>
             </div>
           </div>
 

@@ -8,6 +8,7 @@ const template = document.getElementById("jobCardTemplate");
 const captureBtn = document.getElementById("captureBtn");
 const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
+const workspace = document.getElementById("workspace");
 
 const readerEmpty = document.getElementById("readerEmpty");
 const readerCard = document.getElementById("readerCard");
@@ -154,6 +155,7 @@ function selectJob(jobId, { keepEditor = false } = {}) {
 
 function render() {
   ensureValidSelection();
+  const selectedJob = getSelectedJob();
   countBadge.textContent = `${state.jobs.length} saved`;
   emptyState.style.display = state.jobs.length ? "none" : "grid";
   jobList.innerHTML = "";
@@ -165,8 +167,6 @@ function render() {
     const company = fragment.querySelector(".summary-company");
     const location = fragment.querySelector(".summary-location");
     const summaryDot = fragment.querySelector(".summary-dot");
-    const summaryCaptured = fragment.querySelector(".summary-captured");
-    const summarySource = fragment.querySelector(".summary-source");
 
     const menuTrigger = fragment.querySelector(".menu-trigger");
     const menuPanel = fragment.querySelector(".menu-panel");
@@ -185,8 +185,6 @@ function render() {
     company.textContent = job.company || "Company pending";
     location.textContent = job.location || "Location pending";
     summaryDot.classList.toggle("is-hidden", !hasCompany || !hasLocation);
-    summaryCaptured.textContent = formatRelativeDate(job.capturedAt);
-    summarySource.textContent = formatSource(job.url);
 
     card.addEventListener("click", (event) => {
       if (event.target.closest(".menu-wrap")) return;
@@ -276,7 +274,8 @@ function render() {
     jobList.appendChild(fragment);
   }
 
-  renderReader(getSelectedJob());
+  workspace?.classList.toggle("has-selection", Boolean(selectedJob));
+  renderReader(selectedJob);
 }
 
 function renderReader(job) {
@@ -569,7 +568,7 @@ function formatSource(url = "") {
 }
 
 function formatReaderMeta(job) {
-  const parts = [job.company, job.location, formatRelativeDate(job.capturedAt), formatSource(job.url)].filter(Boolean);
+  const parts = [job.company, job.location].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Company or location pending";
 }
 
