@@ -8,39 +8,91 @@
   </head>
   <body>
     <div class="app-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Boss helper</p>
-          <h1>Opportunity Queue</h1>
-          <p class="subcopy">Capture jobs quickly, rank them, and review JD details without copy/paste.</p>
+      <header class="toolbar">
+        <div class="toolbar-left">
+          <span class="toolbar-title">Opportunity Queue</span>
+          <span id="countBadge" class="count-badge">0 saved</span>
         </div>
-        <div class="hero-actions">
-          <button id="captureBtn" class="primary-btn">Capture Current Job</button>
-          <div class="inline-actions">
-            <button id="copyMarkdownBtn" class="ghost-btn">Copy Markdown</button>
-            <button id="exportJsonBtn" class="ghost-btn">Export JSON</button>
-          </div>
+        <button id="captureBtn" class="primary-btn">Capture</button>
+        <div class="toolbar-actions">
+          <button id="copyMarkdownBtn" class="ghost-btn toolbar-btn">Copy MD</button>
+          <button id="exportJsonBtn" class="ghost-btn toolbar-btn">Export JSON</button>
         </div>
       </header>
 
-      <section class="status-bar">
+      <section class="inline-status">
         <span id="statusText">Ready.</span>
-        <span id="countBadge" class="count-badge">0 saved</span>
       </section>
 
-      <main>
-        <div id="emptyState" class="empty-state">
-          <div class="empty-icon">Q</div>
-          <h2>No jobs captured yet</h2>
-          <p>Open a BOSS listing page, click one job, then use <strong>Capture Current Job</strong>.</p>
-        </div>
-        <div id="jobList" class="job-list"></div>
+      <main id="workspace" class="workspace">
+        <section class="queue-pane">
+          <div id="emptyState" class="empty-state">
+            <div class="empty-icon">Q</div>
+            <h2>No jobs captured yet</h2>
+            <p>Open a BOSS listing page, click one job, then use <strong>Capture</strong>.</p>
+          </div>
+          <div id="jobList" class="job-list"></div>
+        </section>
+
+        <div id="paneDivider" class="pane-divider" role="separator" aria-orientation="horizontal" aria-label="Resize panels"></div>
+
+        <section class="reader-pane">
+          <div id="readerEmpty" class="reader-empty">Select a card to read JD details.</div>
+
+          <article id="readerCard" class="reader-card is-hidden">
+            <header class="reader-header">
+              <div class="reader-heading">
+                <h2 id="readerRole"></h2>
+                <p id="readerMeta"></p>
+                <p id="readerCaptured"></p>
+              </div>
+              <div class="reader-actions">
+                <button id="readerCopyBtn" type="button" class="ghost-btn compact-btn">Copy JD</button>
+                <button id="readerOpenBtn" type="button" class="ghost-btn compact-btn">Open source</button>
+              </div>
+            </header>
+
+            <pre id="readerJdText" class="reader-jd-text"></pre>
+
+            <section id="readerEditorPanel" class="editor-panel is-hidden">
+              <label>
+                <span>Role</span>
+                <input data-reader-field="role" />
+              </label>
+              <label>
+                <span>Company</span>
+                <input data-reader-field="company" />
+              </label>
+              <label>
+                <span>Location</span>
+                <input data-reader-field="location" />
+              </label>
+              <label>
+                <span>Salary</span>
+                <input data-reader-field="salary" placeholder="Optional" />
+              </label>
+              <label class="full-width">
+                <span>URL</span>
+                <input data-reader-field="url" />
+              </label>
+              <label class="full-width">
+                <span>Note</span>
+                <textarea data-reader-field="note" rows="3" placeholder="Optional note"></textarea>
+              </label>
+            </section>
+
+            <footer class="footer-meta">
+              <span id="readerReviewFlag" class="review-flag"></span>
+              <span id="readerSource" class="summary-source"></span>
+            </footer>
+          </article>
+        </section>
       </main>
     </div>
 
     <template id="jobCardTemplate">
-      <details class="job-card" draggable="true">
-        <summary class="job-summary">
+      <article class="job-card" draggable="true">
+        <div class="job-summary">
           <div class="drag-handle" title="Drag to reorder">::</div>
 
           <div class="summary-main">
@@ -69,50 +121,8 @@
               </div>
             </div>
           </div>
-        </summary>
-
-        <div class="card-content">
-          <article class="jd-block">
-            <div class="section-head">
-              <h4>JD</h4>
-              <button type="button" class="copy-jd-btn">Copy JD</button>
-            </div>
-            <pre class="jd-text"></pre>
-          </article>
-
-          <section class="editor-panel is-hidden">
-            <label>
-              <span>Role</span>
-              <input data-field="role" />
-            </label>
-            <label>
-              <span>Company</span>
-              <input data-field="company" />
-            </label>
-            <label>
-              <span>Location</span>
-              <input data-field="location" />
-            </label>
-            <label>
-              <span>Salary</span>
-              <input data-field="salary" placeholder="Optional" />
-            </label>
-            <label class="full-width">
-              <span>URL</span>
-              <input data-field="url" />
-            </label>
-            <label class="full-width">
-              <span>Note</span>
-              <textarea data-field="note" rows="3" placeholder="Optional note"></textarea>
-            </label>
-          </section>
-
-          <div class="footer-meta">
-            <span class="captured-at"></span>
-            <span class="review-flag"></span>
-          </div>
         </div>
-      </details>
+      </article>
     </template>
 
     <script src="sidepanel.js"></script>
