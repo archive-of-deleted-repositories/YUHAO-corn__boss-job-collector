@@ -24,9 +24,12 @@
             <button id="formatterSettingsBtn" class="ghost-btn toolbar-btn" type="button" aria-expanded="false">AI Format</button>
             <section id="formatterSettingsPanel" class="settings-panel" hidden>
               <form id="formatterSettingsForm" class="settings-form">
-                <label class="settings-checkbox">
-                  <input id="formatterEnabledInput" type="checkbox" />
+                <label class="settings-switch-row">
                   <span>Enable JD formatter</span>
+                  <span class="settings-switch">
+                    <input id="formatterEnabledInput" type="checkbox" role="switch" />
+                    <span class="settings-switch-ui" aria-hidden="true"></span>
+                  </span>
                 </label>
 
                 <label>
@@ -53,8 +56,10 @@
                 </label>
 
                 <p class="settings-note">Use OpenAI provider for OpenAI-compatible APIs (including Doubao Ark).</p>
+                <p id="formatterTestStatus" class="settings-test-status" aria-live="polite"></p>
 
                 <div class="settings-actions">
+                  <button id="formatterTestBtn" type="button" class="ghost-btn settings-btn">Test</button>
                   <button id="formatterCloseBtn" type="button" class="ghost-btn settings-btn">Close</button>
                   <button id="formatterSaveBtn" type="submit" class="primary-btn settings-btn">Save</button>
                 </div>

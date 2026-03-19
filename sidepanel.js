@@ -32,6 +32,8 @@ const formatterProviderInput = document.getElementById("formatterProviderInput")
 const formatterModelInput = document.getElementById("formatterModelInput");
 const formatterEndpointInput = document.getElementById("formatterEndpointInput");
 const formatterApiKeyInput = document.getElementById("formatterApiKeyInput");
+const formatterTestBtn = document.getElementById("formatterTestBtn");
+const formatterTestStatus = document.getElementById("formatterTestStatus");
 const workspace = document.getElementById("workspace");
 
 const readerEmpty = document.getElementById("readerEmpty");
@@ -75,6 +77,7 @@ function bindTopLevelEvents() {
   formatterCloseBtn.addEventListener("click", () => closeFormatterSettingsPanel());
   formatterSettingsForm.addEventListener("submit", saveFormatterConfigFromForm);
   formatterProviderInput.addEventListener("change", handleProviderChange);
+  formatterTestBtn.addEventListener("click", testFormatterConnection);
 
   readerCopyBtn.addEventListener("click", copySelectedJd);
   readerOpenBtn.addEventListener("click", openSelectedSource);
@@ -124,6 +127,7 @@ function toggleFormatterSettingsPanel(event) {
   }
 
   syncFormatterConfigToForm();
+  clearFormatterTestStatus();
   formatterSettingsPanel.hidden = false;
   formatterSettingsBtn.setAttribute("aria-expanded", "true");
 }
@@ -223,21 +227,25 @@ function handleProviderChange() {
   formatterProviderInput.value = provider;
   formatterModelInput.value = defaults.model;
   formatterEndpointInput.value = defaults.endpoint;
+  clearFormatterTestStatus();
+}
+
+function getFormatterConfigFromForm() {
+  const provider = normalizeProvider(formatterProviderInput.value);
+  const defaults = getFormatterDefaults(provider);
+  return {
+    enabled: Boolean(formatterEnabledInput.checked),
+    provider,
+    apiKey: formatterApiKeyInput.value.trim(),
+    model: formatterModelInput.value.trim() || defaults.model,
+    endpoint: normalizeFormatterEndpoint(provider, formatterEndpointInput.value.trim()),
+  };
 }
 
 async function saveFormatterConfigFromForm(event) {
   event.preventDefault();
 
-  const provider = normalizeProvider(formatterProviderInput.value);
-  const model = formatterModelInput.value.trim() || getFormatterDefaults(provider).model;
-  const endpoint = normalizeFormatterEndpoint(provider, formatterEndpointInput.value.trim());
-  const config = {
-    enabled: Boolean(formatterEnabledInput.checked),
-    provider,
-    apiKey: formatterApiKeyInput.value.trim(),
-    model,
-    endpoint,
-  };
+  const config = getFormatterConfigFromForm();
 
   state.formatterConfig = config;
   state.pendingStructuredJobs.clear();
@@ -246,6 +254,51 @@ async function saveFormatterConfigFromForm(event) {
   closeFormatterSettingsPanel();
   render();
   setStatus("Formatter settings saved.");
+}
+
+function clearFormatterTestStatus() {
+  formatterTestStatus.textContent = "";
+  formatterTestStatus.classList.remove("is-success", "is-error");
+}
+
+function setFormatterTestStatus(message, type = "neutral") {
+  formatterTestStatus.textContent = message;
+  formatterTestStatus.classList.remove("is-success", "is-error");
+  if (type === "success") {
+    formatterTestStatus.classList.add("is-success");
+  } else if (type === "error") {
+    formatterTestStatus.classList.add("is-error");
+  }
+}
+
+async function testFormatterConnection() {
+  const config = getFormatterConfigFromForm();
+  if (!config.apiKey || !config.model || !config.endpoint) {
+    setFormatterTestStatus("Please fill API key, model, and endpoint first.", "error");
+    return;
+  }
+
+  formatterTestBtn.disabled = true;
+  setFormatterTestStatus("Testing connection...", "neutral");
+
+  try {
+    await pingFormatter(config);
+    setFormatterTestStatus("Connection OK. You can save and use Structured mode.", "success");
+  } catch (error) {
+    const message = error?.message ? String(error.message) : "Unknown error.";
+    setFormatterTestStatus(`Failed: ${message}`, "error");
+  } finally {
+    formatterTestBtn.disabled = false;
+  }
+}
+
+async function pingFormatter(config) {
+  const prompt = '请仅返回纯文本 "ok"。';
+  if (config.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
+    await formatJdWithAnthropic(prompt, config);
+    return;
+  }
+  await formatJdWithOpenAI(prompt, config);
 }
 
 async function saveJobs() {
@@ -474,32 +527,38 @@ function switchReaderMode(mode) {
   }
 
   state.readerMode = mode;
-  renderReader(getSelectedJob());
+  const selectedJob = getSelectedJob();
+  renderReader(selectedJob);
+  if (mode === "structured" && selectedJob) {
+    maybeFormatStructured(selectedJob, { force: true });
+  }
 }
 
 function updateReaderModeControls(job) {
   const hasStructured = Boolean(job && getStructuredForJob(job));
   const isPending = Boolean(job && state.pendingStructuredJobs.has(job.id));
   const hasFailure = Boolean(job && hasStructuredFailure(job));
-  const shouldShowStructured = Boolean(job && canUseFormatter() && ((job.jdText || "").trim() || hasStructured));
+  const hasJdText = Boolean((job?.jdText || "").trim());
+  const shouldShowStructured = Boolean(job && canUseFormatter() && (hasJdText || hasStructured));
 
   readerStructuredBtn.hidden = !shouldShowStructured;
-  readerStructuredBtn.disabled = !hasStructured;
+  readerStructuredBtn.disabled = isPending || !canUseFormatter();
   if (hasStructured) {
     readerStructuredBtn.textContent = "Structured";
   } else if (isPending) {
     readerStructuredBtn.textContent = "Formatting...";
   } else if (hasFailure) {
-    readerStructuredBtn.textContent = "Unavailable";
+    readerStructuredBtn.textContent = "Retry";
   } else {
-    readerStructuredBtn.textContent = "Structured";
+    readerStructuredBtn.textContent = "Format";
   }
 
   if (!shouldShowStructured && state.readerMode === "structured") {
     state.readerMode = "raw";
   }
 
-  const rawActive = state.readerMode !== "structured";
+  const structuredActive = state.readerMode === "structured" && hasStructured;
+  const rawActive = !structuredActive;
   readerRawBtn.classList.toggle("is-active", rawActive);
   readerRawBtn.setAttribute("aria-pressed", rawActive ? "true" : "false");
 
@@ -507,7 +566,6 @@ function updateReaderModeControls(job) {
     return;
   }
 
-  const structuredActive = state.readerMode === "structured";
   readerStructuredBtn.classList.toggle("is-active", structuredActive);
   readerStructuredBtn.setAttribute("aria-pressed", structuredActive ? "true" : "false");
 }
@@ -561,12 +619,12 @@ function hasStructuredFailure(job) {
   return state.failedStructuredSignatures[job.id] === getJobSignature(job);
 }
 
-function maybeFormatStructured(job) {
+function maybeFormatStructured(job, { force = false } = {}) {
   if (!job || !canUseFormatter()) return;
   if (!job.jdText?.trim()) return;
   if (getStructuredForJob(job)) return;
   if (state.pendingStructuredJobs.has(job.id)) return;
-  if (hasStructuredFailure(job)) return;
+  if (!force && hasStructuredFailure(job)) return;
 
   state.pendingStructuredJobs.add(job.id);
   delete state.failedStructuredSignatures[job.id];
@@ -574,7 +632,10 @@ function maybeFormatStructured(job) {
 
   formatJdWithModel(job)
     .then((formattedText) => {
-      if (!formattedText) return;
+      if (!formattedText) {
+        state.failedStructuredSignatures[job.id] = getJobSignature(job);
+        return;
+      }
       state.structuredCache[job.id] = {
         signature: getJobSignature(job),
         text: formattedText,
@@ -603,24 +664,24 @@ async function formatJdWithModel(job) {
   ].join("\n");
 
   if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
-    return formatJdWithAnthropic(prompt);
+    return formatJdWithAnthropic(prompt, state.formatterConfig);
   }
-  return formatJdWithOpenAI(prompt);
+  return formatJdWithOpenAI(prompt, state.formatterConfig);
 }
 
-async function formatJdWithOpenAI(prompt) {
+async function formatJdWithOpenAI(prompt, formatterConfig) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
 
   try {
-    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, state.formatterConfig.endpoint), {
+    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, formatterConfig.endpoint), {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${state.formatterConfig.apiKey}`,
+        Authorization: `Bearer ${formatterConfig.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: state.formatterConfig.model,
+        model: formatterConfig.model,
         input: [
           {
             role: "user",
@@ -637,7 +698,7 @@ async function formatJdWithOpenAI(prompt) {
     });
 
     if (!response.ok) {
-      throw new Error(`Formatter request failed: ${response.status}`);
+      throw new Error(await describeFormatterError(response));
     }
 
     const payload = await response.json();
@@ -649,20 +710,20 @@ async function formatJdWithOpenAI(prompt) {
   }
 }
 
-async function formatJdWithAnthropic(prompt) {
+async function formatJdWithAnthropic(prompt, formatterConfig) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
 
   try {
-    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, state.formatterConfig.endpoint), {
+    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, formatterConfig.endpoint), {
       method: "POST",
       headers: {
-        "x-api-key": state.formatterConfig.apiKey,
+        "x-api-key": formatterConfig.apiKey,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: state.formatterConfig.model,
+        model: formatterConfig.model,
         max_tokens: 1200,
         messages: [
           {
@@ -675,7 +736,7 @@ async function formatJdWithAnthropic(prompt) {
     });
 
     if (!response.ok) {
-      throw new Error(`Formatter request failed: ${response.status}`);
+      throw new Error(await describeFormatterError(response));
     }
 
     const payload = await response.json();
@@ -685,6 +746,26 @@ async function formatJdWithAnthropic(prompt) {
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+async function describeFormatterError(response) {
+  let detail = "";
+  try {
+    const payload = await response.json();
+    detail =
+      payload?.error?.message ||
+      payload?.error?.type ||
+      payload?.message ||
+      "";
+  } catch {
+    try {
+      detail = (await response.text()).trim();
+    } catch {
+      detail = "";
+    }
+  }
+  const compact = String(detail || "").replace(/\s+/g, " ").trim().slice(0, 140);
+  return compact ? `Request failed (${response.status}): ${compact}` : `Request failed (${response.status}).`;
 }
 
 function extractModelOutputText(payload) {
