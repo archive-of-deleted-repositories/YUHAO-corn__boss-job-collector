@@ -78,10 +78,11 @@ async function loadJobs() {
   const deduped = new Map();
 
   jobs.forEach((job) => {
+    const normalizedJobBase = stripLegacySalaryFields(job);
     const normalizedUrl = normalizeJobUrl(job.url || job.id || "");
     const normalizedId = normalizeJobUrl(job.id || job.url || normalizedUrl);
     const normalizedJob = {
-      ...job,
+      ...normalizedJobBase,
       id: normalizedId || job.id || crypto.randomUUID(),
       url: normalizedUrl || job.url || "",
     };
@@ -161,7 +162,6 @@ function render() {
     const fragment = template.content.cloneNode(true);
     const card = fragment.querySelector(".job-card");
     const role = fragment.querySelector(".job-role");
-    const salary = fragment.querySelector(".job-salary");
     const company = fragment.querySelector(".summary-company");
     const location = fragment.querySelector(".summary-location");
     const summaryDot = fragment.querySelector(".summary-dot");
@@ -187,17 +187,6 @@ function render() {
     summaryDot.classList.toggle("is-hidden", !hasCompany || !hasLocation);
     summaryCaptured.textContent = formatRelativeDate(job.capturedAt);
     summarySource.textContent = formatSource(job.url);
-
-    if (job.salary) {
-      salary.classList.remove("is-empty");
-      salary.textContent = job.salary;
-    } else if (job.salaryNeedsReview) {
-      salary.classList.remove("is-empty");
-      salary.textContent = "Review salary";
-    } else {
-      salary.classList.add("is-empty");
-      salary.textContent = "";
-    }
 
     card.addEventListener("click", (event) => {
       if (event.target.closest(".menu-wrap")) return;
@@ -328,9 +317,6 @@ async function handleReaderFieldChange(event) {
   if (!field) return;
 
   job[field] = event.target.value.trim();
-  if (field === "salary" && job.salaryNeedsReview && job.salary) {
-    job.salaryNeedsReview = false;
-  }
 
   await saveJobs();
   render();
@@ -407,8 +393,6 @@ async function captureCurrentJob() {
 }
 
 function extractBossJob() {
-  const containsPrivateUse = (value = "") => /[\uE000-\uF8FF]/.test(value);
-
   const normalizeUrl = (url = "") => {
     if (!url) return "";
     try {
@@ -464,9 +448,6 @@ function extractBossJob() {
   }
 
   const role = queryText(".job-name", detailHeader) || queryText(".job-name", activeCard || document);
-  const salaryFromCard = queryText(".job-salary", activeCard || document);
-  const salaryFromDetail = queryText(".job-salary", detailHeader);
-  const salaryRaw = [salaryFromCard, salaryFromDetail].find((value) => value && !containsPrivateUse(value)) || salaryFromCard || salaryFromDetail || "";
 
   const companyRaw = queryText(".boss-name", activeCard || document) || queryText(".boss-info", activeCard || document);
   const company = companyRaw.split("·")[0].trim();
@@ -486,8 +467,6 @@ function extractBossJob() {
     .replace(/^举报 微信扫码分享\s*/u, "")
     .trim();
 
-  const salary = containsPrivateUse(salaryRaw) ? "" : salaryRaw;
-
   if (!role || !jdText) {
     return { ok: false, error: "Could not find role or JD text." };
   }
@@ -500,9 +479,6 @@ function extractBossJob() {
       role,
       company,
       location,
-      salary,
-      salaryNeedsReview: Boolean(salaryRaw) && containsPrivateUse(salaryRaw),
-      salaryRaw,
       jdText,
       note: "",
       capturedAt: new Date().toISOString(),
@@ -521,7 +497,8 @@ async function copyMarkdown() {
 }
 
 function exportJson() {
-  const blob = new Blob([JSON.stringify(state.jobs, null, 2)], { type: "application/json" });
+  const exportableJobs = state.jobs.map(stripLegacySalaryFields);
+  const blob = new Blob([JSON.stringify(exportableJobs, null, 2)], { type: "application/json" });
   downloadBlob(blob, `opportunity-queue-${dateStamp()}.json`);
   setStatus("Exported JSON.");
 }
@@ -543,7 +520,6 @@ function generateMarkdown(jobs) {
     lines.push(`### ${order} - ${job.company || "Company"} - ${job.role || "Role"}`);
     lines.push(`- Link: ${job.url ? `[JD](${job.url})` : ""}`);
     lines.push(`- Location: ${job.location || ""}`);
-    lines.push(`- Salary: ${job.salary || ""}`);
     lines.push(`- Captured: ${formatDate(job.capturedAt)}`);
     lines.push(`- Note: ${job.note || ""}`);
     lines.push("");
@@ -595,6 +571,12 @@ function formatSource(url = "") {
 function formatReaderMeta(job) {
   const parts = [job.company, job.location, formatRelativeDate(job.capturedAt), formatSource(job.url)].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Company or location pending";
+}
+
+function stripLegacySalaryFields(job) {
+  if (!job || typeof job !== "object") return job;
+  const { salary, salaryNeedsReview, salaryRaw, ...rest } = job;
+  return rest;
 }
 
 function dateStamp() {

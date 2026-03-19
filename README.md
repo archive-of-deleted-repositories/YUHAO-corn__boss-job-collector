@@ -19,14 +19,12 @@ A tiny Chromium extension for capturing BOSS job postings into a sortable side p
 - `company`
 - `role`
 - `location`
-- `salary`
 - `jdText`
 - `capturedAt`
 
 ## Notes
 - Company is captured from the active card in the left list
 - Role, location, JD text, and job link are captured from the right detail panel
-- Salary may be obfuscated on BOSS and may need manual cleanup after capture
 
 ## Load locally
 1. Open `chrome://extensions`

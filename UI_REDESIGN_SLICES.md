@@ -125,7 +125,7 @@ Acceptance:
 ## Manual QA Checklist (per slice)
 - Capture one new job from BOSS page.
 - Capture same job again (update path).
-- Expand/collapse card.
+- Select different cards and verify `Now Viewing` updates.
 - Reorder multiple cards.
 - Open menu and trigger each action.
 - Copy JD and verify clipboard.
