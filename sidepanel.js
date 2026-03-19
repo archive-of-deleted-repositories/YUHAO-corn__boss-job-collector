@@ -4,6 +4,8 @@ const FORMATTER_PROVIDERS = {
   OPENAI: "openai",
   ANTHROPIC: "anthropic",
 };
+const FORMATTER_TIMEOUT_MS = 12000;
+const FORMATTER_LOG_LIMIT = 18;
 const FORMATTER_DEFAULTS = {
   [FORMATTER_PROVIDERS.OPENAI]: {
     model: "gpt-4.1-mini",
@@ -35,6 +37,7 @@ const formatterApiKeyInput = document.getElementById("formatterApiKeyInput");
 const formatterTestBtn = document.getElementById("formatterTestBtn");
 const formatterTestStatus = document.getElementById("formatterTestStatus");
 const formatterTestPreview = document.getElementById("formatterTestPreview");
+const formatterDebugLog = document.getElementById("formatterDebugLog");
 const workspace = document.getElementById("workspace");
 
 const readerEmpty = document.getElementById("readerEmpty");
@@ -59,6 +62,7 @@ const state = {
   structuredCache: {},
   pendingStructuredJobs: new Set(),
   formatterFailures: {},
+  formatterLogs: [],
 };
 
 init();
@@ -264,6 +268,11 @@ function clearFormatterTestStatus() {
   formatterTestPreview.classList.add("is-hidden");
 }
 
+function clearFormatterLogs() {
+  state.formatterLogs = [];
+  renderFormatterLogs();
+}
+
 function setFormatterTestStatus(message, type = "neutral") {
   formatterTestStatus.textContent = message;
   formatterTestStatus.classList.remove("is-success", "is-error");
@@ -280,6 +289,21 @@ function setFormatterTestPreview(text) {
   formatterTestPreview.classList.toggle("is-hidden", !content);
 }
 
+function logFormatterEvent(message, data) {
+  const time = new Date().toLocaleTimeString();
+  const detail = data ? ` ${JSON.stringify(data)}` : "";
+  const line = `[${time}] ${message}${detail}`;
+  state.formatterLogs = [line, ...state.formatterLogs].slice(0, FORMATTER_LOG_LIMIT);
+  renderFormatterLogs();
+  console.log("[formatter]", message, data || "");
+}
+
+function renderFormatterLogs() {
+  const content = state.formatterLogs.join("\n");
+  formatterDebugLog.textContent = content;
+  formatterDebugLog.classList.toggle("is-hidden", !content);
+}
+
 async function testFormatterConnection() {
   const config = getFormatterConfigFromForm();
   if (!config.apiKey || !config.model || !config.endpoint) {
@@ -289,6 +313,7 @@ async function testFormatterConnection() {
 
   formatterTestBtn.disabled = true;
   setFormatterTestStatus("Testing connection...", "neutral");
+  clearFormatterLogs();
 
   try {
     const startedAt = performance.now();
@@ -313,12 +338,16 @@ async function pingFormatter(config) {
     selectedJob?.jdText?.trim() ||
     "岗位职责：负责数据分析与增长运营。任职要求：有A/B测试经验，沟通协作良好。";
   const prompt = buildFormatterPrompt(rawText);
+  const context = {
+    source: selectedJob?.jdText?.trim() ? "test:selected-job" : "test:sample",
+    rawLength: rawText.length,
+  };
 
   let formatted = "";
   if (config.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
-    formatted = await formatJdWithAnthropic(prompt, config);
+    formatted = await formatJdWithAnthropic(prompt, config, context);
   } else {
-    formatted = await formatJdWithOpenAI(prompt, config);
+    formatted = await formatJdWithOpenAI(prompt, config, context);
   }
   if (!formatted) throw new Error("Model returned empty text.");
 
@@ -684,11 +713,16 @@ function maybeFormatStructured(job, { force = false } = {}) {
 
 async function formatJdWithModel(job) {
   const prompt = buildFormatterPrompt(job.jdText || "");
+  const context = {
+    source: "reader",
+    jobId: String(job.id || "").slice(-12),
+    rawLength: (job.jdText || "").length,
+  };
 
   if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
-    return formatJdWithAnthropic(prompt, state.formatterConfig);
+    return formatJdWithAnthropic(prompt, state.formatterConfig, context);
   }
-  return formatJdWithOpenAI(prompt, state.formatterConfig);
+  return formatJdWithOpenAI(prompt, state.formatterConfig, context);
 }
 
 function buildFormatterPrompt(rawText) {
@@ -704,12 +738,21 @@ function buildFormatterPrompt(rawText) {
   ].join("\n");
 }
 
-async function formatJdWithOpenAI(prompt, formatterConfig) {
+async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  const startedAt = performance.now();
+  const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, formatterConfig.endpoint);
+  const timeout = window.setTimeout(() => controller.abort("timeout"), FORMATTER_TIMEOUT_MS);
+  logFormatterEvent("openai request:start", {
+    ...context,
+    model: formatterConfig.model,
+    endpoint,
+    promptLength: prompt.length,
+    timeoutMs: FORMATTER_TIMEOUT_MS,
+  });
 
   try {
-    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, formatterConfig.endpoint), {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${formatterConfig.apiKey}`,
@@ -717,6 +760,7 @@ async function formatJdWithOpenAI(prompt, formatterConfig) {
       },
       body: JSON.stringify({
         model: formatterConfig.model,
+        max_output_tokens: 700,
         input: [
           {
             role: "user",
@@ -732,24 +776,53 @@ async function formatJdWithOpenAI(prompt, formatterConfig) {
       signal: controller.signal,
     });
 
+    logFormatterEvent("openai request:response", {
+      ...context,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+
     if (!response.ok) {
       throw new Error(await describeFormatterError(response));
     }
 
     const payload = await response.json();
     const outputText = extractModelOutputText(payload);
-    return sanitizeFormattedText(outputText);
+    const formatted = sanitizeFormattedText(outputText);
+    logFormatterEvent("openai request:done", {
+      ...context,
+      outputLength: formatted.length,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    return formatted;
+  } catch (error) {
+    const normalizedError = normalizeFormatterRuntimeError(error);
+    logFormatterEvent("openai request:error", {
+      ...context,
+      error: normalizedError.message,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    throw normalizedError;
   } finally {
     window.clearTimeout(timeout);
   }
 }
 
-async function formatJdWithAnthropic(prompt, formatterConfig) {
+async function formatJdWithAnthropic(prompt, formatterConfig, context = {}) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  const startedAt = performance.now();
+  const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, formatterConfig.endpoint);
+  const timeout = window.setTimeout(() => controller.abort("timeout"), FORMATTER_TIMEOUT_MS);
+  logFormatterEvent("anthropic request:start", {
+    ...context,
+    model: formatterConfig.model,
+    endpoint,
+    promptLength: prompt.length,
+    timeoutMs: FORMATTER_TIMEOUT_MS,
+  });
 
   try {
-    const response = await fetch(normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, formatterConfig.endpoint), {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "x-api-key": formatterConfig.apiKey,
@@ -769,16 +842,44 @@ async function formatJdWithAnthropic(prompt, formatterConfig) {
       signal: controller.signal,
     });
 
+    logFormatterEvent("anthropic request:response", {
+      ...context,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+
     if (!response.ok) {
       throw new Error(await describeFormatterError(response));
     }
 
     const payload = await response.json();
     const outputText = extractAnthropicOutputText(payload);
-    return sanitizeFormattedText(outputText);
+    const formatted = sanitizeFormattedText(outputText);
+    logFormatterEvent("anthropic request:done", {
+      ...context,
+      outputLength: formatted.length,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    return formatted;
+  } catch (error) {
+    const normalizedError = normalizeFormatterRuntimeError(error);
+    logFormatterEvent("anthropic request:error", {
+      ...context,
+      error: normalizedError.message,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    throw normalizedError;
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+function normalizeFormatterRuntimeError(error) {
+  const message = error?.message ? String(error.message) : "";
+  if (error?.name === "AbortError" || /signal is aborted without reason/i.test(message)) {
+    return new Error(`Request timed out after ${FORMATTER_TIMEOUT_MS}ms.`);
+  }
+  return error instanceof Error ? error : new Error(message || "Unknown formatter error.");
 }
 
 async function describeFormatterError(response) {

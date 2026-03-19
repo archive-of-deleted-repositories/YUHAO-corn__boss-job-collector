@@ -304,6 +304,24 @@ textarea {
   display: none;
 }
 
+.settings-debug-log {
+  margin: 0;
+  max-height: 132px;
+  overflow: auto;
+  border: 1px solid rgba(22, 35, 54, 0.08);
+  border-radius: 8px;
+  background: rgba(242, 246, 250, 0.96);
+  padding: 8px;
+  white-space: pre-wrap;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #4a5568;
+}
+
+.settings-debug-log.is-hidden {
+  display: none;
+}
+
 .settings-actions {
   display: flex;
   justify-content: space-between;
