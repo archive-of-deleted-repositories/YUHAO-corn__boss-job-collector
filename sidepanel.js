@@ -4,7 +4,7 @@ const FORMATTER_PROVIDERS = {
   OPENAI: "openai",
   ANTHROPIC: "anthropic",
 };
-const FORMATTER_TIMEOUT_MS = 12000;
+const FORMATTER_TIMEOUT_MS = 25000;
 const FORMATTER_LOG_LIMIT = 18;
 const FORMATTER_DEFAULTS = {
   [FORMATTER_PROVIDERS.OPENAI]: {
@@ -742,7 +742,11 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
   const controller = new AbortController();
   const startedAt = performance.now();
   const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, formatterConfig.endpoint);
-  const timeout = window.setTimeout(() => controller.abort("timeout"), FORMATTER_TIMEOUT_MS);
+  let didTimeout = false;
+  const timeout = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, FORMATTER_TIMEOUT_MS);
   logFormatterEvent("openai request:start", {
     ...context,
     model: formatterConfig.model,
@@ -760,7 +764,7 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
       },
       body: JSON.stringify({
         model: formatterConfig.model,
-        max_output_tokens: 700,
+        max_output_tokens: 500,
         input: [
           {
             role: "user",
@@ -796,7 +800,14 @@ async function formatJdWithOpenAI(prompt, formatterConfig, context = {}) {
     });
     return formatted;
   } catch (error) {
-    const normalizedError = normalizeFormatterRuntimeError(error);
+    const normalizedError = normalizeFormatterRuntimeError(error, { didTimeout });
+    if (didTimeout) {
+      logFormatterEvent("openai request:timeout", {
+        ...context,
+        timeoutMs: FORMATTER_TIMEOUT_MS,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+    }
     logFormatterEvent("openai request:error", {
       ...context,
       error: normalizedError.message,
@@ -812,7 +823,11 @@ async function formatJdWithAnthropic(prompt, formatterConfig, context = {}) {
   const controller = new AbortController();
   const startedAt = performance.now();
   const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, formatterConfig.endpoint);
-  const timeout = window.setTimeout(() => controller.abort("timeout"), FORMATTER_TIMEOUT_MS);
+  let didTimeout = false;
+  const timeout = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, FORMATTER_TIMEOUT_MS);
   logFormatterEvent("anthropic request:start", {
     ...context,
     model: formatterConfig.model,
@@ -862,7 +877,14 @@ async function formatJdWithAnthropic(prompt, formatterConfig, context = {}) {
     });
     return formatted;
   } catch (error) {
-    const normalizedError = normalizeFormatterRuntimeError(error);
+    const normalizedError = normalizeFormatterRuntimeError(error, { didTimeout });
+    if (didTimeout) {
+      logFormatterEvent("anthropic request:timeout", {
+        ...context,
+        timeoutMs: FORMATTER_TIMEOUT_MS,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+    }
     logFormatterEvent("anthropic request:error", {
       ...context,
       error: normalizedError.message,
@@ -874,9 +896,9 @@ async function formatJdWithAnthropic(prompt, formatterConfig, context = {}) {
   }
 }
 
-function normalizeFormatterRuntimeError(error) {
+function normalizeFormatterRuntimeError(error, { didTimeout = false } = {}) {
   const message = error?.message ? String(error.message) : "";
-  if (error?.name === "AbortError" || /signal is aborted without reason/i.test(message)) {
+  if (didTimeout || error?.name === "AbortError" || /signal is aborted without reason/i.test(message)) {
     return new Error(`Request timed out after ${FORMATTER_TIMEOUT_MS}ms.`);
   }
   return error instanceof Error ? error : new Error(message || "Unknown formatter error.");
