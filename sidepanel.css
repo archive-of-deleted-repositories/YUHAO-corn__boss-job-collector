@@ -186,15 +186,52 @@ textarea {
 .settings-checkbox {
   display: flex !important;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 4px;
 }
 
 .settings-checkbox span {
   font-size: 12px !important;
   color: var(--text) !important;
+  line-height: 1.25;
 }
 
-.settings-form input,
+.settings-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid rgba(22, 35, 54, 0.38);
+  border-radius: 5px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.settings-checkbox input[type="checkbox"]::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.settings-checkbox input[type="checkbox"]:checked {
+  border-color: rgba(10, 149, 134, 0.5);
+  background: rgba(10, 149, 134, 0.14);
+}
+
+.settings-checkbox input[type="checkbox"]:checked::after {
+  background: #0b7d70;
+}
+
+.settings-form input[type="text"],
+.settings-form input[type="password"],
 .settings-form select {
   width: 100%;
   border: 1px solid rgba(22, 35, 54, 0.14);
