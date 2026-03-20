@@ -4,7 +4,7 @@
 
 下载入口：
 - 最新版本下载页：https://github.com/YUHAO-corn/boss-job-collector/releases/latest
-- 当前首个公开版本：https://github.com/YUHAO-corn/boss-job-collector/releases/tag/v0.1.0
+- 当前版本：https://github.com/YUHAO-corn/boss-job-collector/releases/tag/v0.2.0
 
 这个仓库同时服务两类人：
 - 想直接安装使用的用户
@@ -50,13 +50,14 @@ https://github.com/YUHAO-corn/boss-job-collector/releases/latest
 1. 打开一个 `BOSS 直聘` 岗位详情页
 2. 点击浏览器工具栏中的扩展图标，打开侧边栏
 3. 点击 `Capture`
-4. 在侧边栏中查看、排序、编辑或导出岗位
+4. 或者点击 `Image`，优先粘贴岗位截图并用视觉模型解析
+5. 在侧边栏中查看、排序、编辑或导出岗位
 
 ## AI JD 格式化
 
-AI 格式化默认关闭。
+AI 配置默认关闭。
 
-你可以在侧边栏的 `AI Format` 设置里填写：
+你可以在侧边栏的 `AI` 设置里填写：
 - Provider
 - Model
 - Endpoint / Base URL
@@ -67,7 +68,11 @@ AI 格式化默认关闭。
 - `Anthropic`
 - 兼容 OpenAI 接口格式的服务，例如豆包 Ark
 
-启用后，岗位 JD 文本会发送到你配置的模型服务进行格式化。隐私说明见 [PRIVACY.md](PRIVACY.md)。
+其中：
+- 打开 JD formatter 后，岗位 JD 文本会发送到你配置的模型服务进行格式化
+- 使用 `Image` 导入时，推荐直接粘贴截图；截图会发送到你配置的视觉模型服务进行识别
+
+隐私说明见 [PRIVACY.md](PRIVACY.md)。
 
 ## 本地开发
 
@@ -100,7 +105,7 @@ AI 格式化默认关闭。
 
 - 岗位数据默认保存在浏览器本地 `chrome.storage.local`
 - 项目没有自建后端，也不会把你的数据上传到作者服务器
-- 只有当你主动开启 AI 格式化时，JD 文本和你填写的配置才会用于请求你指定的模型服务
+- 开启 JD formatter 或使用 `Image` 导入时，岗位文本或截图会发送到你指定的模型服务
 
 完整说明见 [PRIVACY.md](PRIVACY.md)。
 

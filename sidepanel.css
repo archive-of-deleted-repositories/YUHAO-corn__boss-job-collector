@@ -63,9 +63,9 @@ textarea {
   border-radius: 14px;
   padding: 8px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
   position: relative;
   z-index: 220;
   isolation: isolate;
@@ -75,18 +75,18 @@ textarea {
 .toolbar-left {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .toolbar-headline {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .toolbar-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.015em;
   white-space: nowrap;
@@ -123,34 +123,143 @@ textarea {
 
 .toolbar-controls {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
-  padding: 4px;
-  border-radius: 12px;
+  width: 100%;
+  padding: 3px 4px;
+  border-radius: 999px;
   border: 1px solid rgba(22, 35, 54, 0.1);
   background: rgba(244, 249, 253, 0.88);
   position: relative;
   z-index: 230;
 }
 
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.image-import-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-group-secondary {
+  padding-left: 6px;
+  border-left: 1px solid rgba(22, 35, 54, 0.08);
+}
+
 .toolbar-btn {
-  min-width: 82px;
-  height: 34px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 0 12px;
+  min-width: 0;
+  height: 28px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0 9px;
+  border-radius: 9px;
+  white-space: nowrap;
 }
 
 .toolbar-btn-primary {
-  min-width: 98px;
+  padding: 0 11px;
+}
+
+.toolbar-btn-accent {
+  background: rgba(24, 196, 176, 0.12);
+  color: var(--accent-strong);
+}
+
+.toolbar-btn-secondary {
+  background: rgba(23, 35, 52, 0.04);
+  color: #435165;
+  box-shadow: inset 0 0 0 1px rgba(22, 35, 54, 0.06);
 }
 
 .toolbar-settings {
-  margin-left: 2px;
+  margin-left: auto;
+  padding-left: 6px;
+  border-left: 1px solid rgba(22, 35, 54, 0.08);
 }
 
 .settings-wrap {
   position: relative;
+}
+
+.toolbar-btn-settings {
+  min-width: 34px;
+}
+
+.image-import-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(248px, calc(100vw - 28px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(22, 37, 56, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 30px rgba(16, 27, 42, 0.18);
+  z-index: 430;
+  backdrop-filter: blur(8px);
+}
+
+.image-import-panel[hidden] {
+  display: none;
+}
+
+.image-import-panel-head {
+  display: grid;
+  gap: 2px;
+}
+
+.image-import-panel-head strong {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.image-import-panel-head span {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.image-import-paste-target {
+  border: 1px dashed rgba(24, 196, 176, 0.4);
+  border-radius: 10px;
+  background: rgba(24, 196, 176, 0.07);
+  padding: 10px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  color: var(--text);
+}
+
+.image-import-paste-target:focus-visible,
+.image-import-choose-btn:focus-visible {
+  outline: 2px solid rgba(12, 163, 147, 0.36);
+  outline-offset: 2px;
+}
+
+.image-import-paste-title {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.image-import-paste-hint {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.image-import-choose-btn {
+  height: 32px;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .settings-panel {
@@ -158,6 +267,8 @@ textarea {
   top: calc(100% + 8px);
   right: 0;
   width: min(320px, calc(100vw - 28px));
+  max-height: min(520px, calc(100vh - 120px));
+  overflow: auto;
   border: 1px solid rgba(22, 37, 56, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.98);
@@ -170,6 +281,24 @@ textarea {
   display: grid;
   gap: 8px;
   padding: 10px;
+}
+
+.settings-header {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 2px;
+}
+
+.settings-header strong {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.settings-header span {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .settings-form label {
@@ -326,6 +455,10 @@ textarea {
   display: flex;
   justify-content: space-between;
   gap: 6px;
+  position: sticky;
+  bottom: 0;
+  padding-top: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.98) 28%);
 }
 
 .settings-btn {
@@ -335,12 +468,12 @@ textarea {
 #statusText {
   min-width: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 120px;
 }
 
 .count-badge,
@@ -410,30 +543,37 @@ textarea {
 }
 
 @media (max-width: 760px) {
-  .toolbar {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-
   .toolbar-left {
     gap: 1px;
   }
 
   .toolbar-controls {
+    gap: 4px;
+    padding: 2px 3px;
     width: 100%;
-    display: grid;
-    grid-template-columns: 1.15fr 1fr 1fr 1fr;
-    gap: 6px;
+  }
+
+  .toolbar-group {
+    gap: 3px;
+  }
+
+  .toolbar-group-secondary {
+    padding-left: 4px;
+  }
+
+  .toolbar-settings {
+    padding-left: 4px;
   }
 
   .toolbar-btn,
   .toolbar-btn-primary {
-    min-width: 0;
-    width: 100%;
+    height: 26px;
+    font-size: 10px;
+    padding: 0 7px;
   }
 
   #statusText {
-    max-width: none;
+    max-width: 88px;
   }
 }
 

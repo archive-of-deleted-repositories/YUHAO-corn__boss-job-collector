@@ -5,7 +5,12 @@ const FORMATTER_PROVIDERS = {
   ANTHROPIC: "anthropic",
 };
 const FORMATTER_TIMEOUT_MS = 25000;
+const IMAGE_IMPORT_TIMEOUT_MS = 45000;
 const FORMATTER_LOG_LIMIT = 18;
+const IMAGE_IMPORT_ACCEPT = "image/*";
+const IMAGE_IMPORT_MAX_DIMENSION = 1800;
+const IMAGE_IMPORT_MAX_BYTES = 2.4 * 1024 * 1024;
+const IMAGE_IMPORT_JPEG_QUALITY = 0.9;
 const FORMATTER_DEFAULTS = {
   [FORMATTER_PROVIDERS.OPENAI]: {
     model: "gpt-4.1-mini",
@@ -23,6 +28,11 @@ const emptyState = document.getElementById("emptyState");
 const jobList = document.getElementById("jobList");
 const template = document.getElementById("jobCardTemplate");
 const captureBtn = document.getElementById("captureBtn");
+const importImageBtn = document.getElementById("importImageBtn");
+const imageImportPanel = document.getElementById("imageImportPanel");
+const imageImportPasteTarget = document.getElementById("imageImportPasteTarget");
+const imageImportChooseBtn = document.getElementById("imageImportChooseBtn");
+const imageImportInput = document.getElementById("imageImportInput");
 const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
 const exportJsonBtn = document.getElementById("exportJsonBtn");
 const formatterSettingsBtn = document.getElementById("formatterSettingsBtn");
@@ -63,6 +73,7 @@ const state = {
   pendingStructuredJobs: new Set(),
   formatterFailures: {},
   formatterLogs: [],
+  pendingImageImport: false,
 };
 
 init();
@@ -76,6 +87,10 @@ async function init() {
 
 function bindTopLevelEvents() {
   captureBtn.addEventListener("click", captureCurrentJob);
+  importImageBtn.addEventListener("click", toggleImageImportPanel);
+  imageImportPasteTarget.addEventListener("click", focusImageImportPasteTarget);
+  imageImportChooseBtn.addEventListener("click", openImageImportPicker);
+  imageImportInput.addEventListener("change", handleImageImportChange);
   copyMarkdownBtn.addEventListener("click", copyMarkdown);
   exportJsonBtn.addEventListener("click", exportJson);
   formatterSettingsBtn.addEventListener("click", toggleFormatterSettingsPanel);
@@ -99,14 +114,20 @@ function bindTopLevelEvents() {
     if (!event.target.closest(".settings-wrap")) {
       closeFormatterSettingsPanel();
     }
+    if (!event.target.closest(".image-import-wrap")) {
+      closeImageImportPanel();
+    }
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeAllMenus();
       closeFormatterSettingsPanel();
+      closeImageImportPanel();
     }
   });
+
+  document.addEventListener("paste", handleDocumentPaste);
 }
 
 function closeAllMenus() {
@@ -121,6 +142,41 @@ function closeAllMenus() {
   });
 }
 
+function toggleImageImportPanel(event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!canUseVisionImport()) {
+    openFormatterSettingsPanel();
+    setStatus("Configure AI first. Image import reuses the same model settings.");
+    return;
+  }
+
+  const shouldOpen = imageImportPanel.hidden;
+  if (!shouldOpen) {
+    closeImageImportPanel();
+    return;
+  }
+
+  imageImportPanel.hidden = false;
+  importImageBtn.setAttribute("aria-expanded", "true");
+  setStatus("Paste a screenshot or choose a file.");
+  window.setTimeout(() => {
+    imageImportPasteTarget?.focus();
+  }, 0);
+}
+
+function closeImageImportPanel() {
+  imageImportPanel.hidden = true;
+  importImageBtn.setAttribute("aria-expanded", "false");
+}
+
+function focusImageImportPasteTarget(event) {
+  event.preventDefault();
+  imageImportPasteTarget.focus();
+  setStatus("Press Ctrl/Cmd + V to paste a screenshot.");
+}
+
 function toggleFormatterSettingsPanel(event) {
   event.preventDefault();
   event.stopPropagation();
@@ -130,6 +186,13 @@ function toggleFormatterSettingsPanel(event) {
     return;
   }
 
+  syncFormatterConfigToForm();
+  clearFormatterTestStatus();
+  formatterSettingsPanel.hidden = false;
+  formatterSettingsBtn.setAttribute("aria-expanded", "true");
+}
+
+function openFormatterSettingsPanel() {
   syncFormatterConfigToForm();
   clearFormatterTestStatus();
   formatterSettingsPanel.hidden = false;
@@ -646,13 +709,7 @@ async function handleReaderFieldChange(event) {
 }
 
 function canUseFormatter() {
-  return Boolean(
-    state.formatterConfig.enabled &&
-      state.formatterConfig.apiKey &&
-      state.formatterConfig.model &&
-      state.formatterConfig.endpoint &&
-      state.formatterConfig.provider
-  );
+  return Boolean(state.formatterConfig.enabled && hasFormatterConfigValues());
 }
 
 function getJobSignature(job) {
@@ -1088,6 +1145,600 @@ function openSelectedSource() {
   window.open(job.url, "_blank", "noopener,noreferrer");
 }
 
+function openImageImportPicker() {
+  imageImportInput.setAttribute("accept", IMAGE_IMPORT_ACCEPT);
+  imageImportInput.value = "";
+  imageImportInput.click();
+}
+
+async function handleImageImportChange(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    await importJobFromImageFile(file);
+  } catch (error) {
+    presentImageImportFailure(error);
+  }
+}
+
+async function handleDocumentPaste(event) {
+  if (imageImportPanel.hidden) return;
+
+  const file = getImageFileFromClipboardEvent(event);
+  if (!file) return;
+
+  event.preventDefault();
+  closeImageImportPanel();
+
+  try {
+    await importJobFromImageFile(file, { sourceLabel: "clipboard" });
+  } catch (error) {
+    presentImageImportFailure(error);
+  }
+}
+
+async function importJobFromImageFile(file, { sourceLabel = "" } = {}) {
+  if (!canUseVisionImport()) {
+    openFormatterSettingsPanel();
+    throw new Error("Configure AI first. Image import reuses the same model settings.");
+  }
+
+  closeImageImportPanel();
+  setImageImportBusy(true);
+  const importLabel = sourceLabel === "clipboard" ? "clipboard image" : file.name || "image";
+  clearFormatterLogs();
+  logFormatterEvent("image import:start", {
+    source: sourceLabel || "file",
+    fileName: file.name || "",
+    fileType: file.type || "",
+    fileBytes: typeof file.size === "number" ? file.size : null,
+  });
+  setStatus(`Reading ${importLabel}...`);
+
+  try {
+    const preparedImage = await prepareImageForImport(file, { sourceLabel });
+    const importedJob = await parseJobFromImage({
+      fileName: preparedImage.fileName,
+      mimeType: preparedImage.mimeType,
+      dataUrl: preparedImage.dataUrl,
+      sourceLabel,
+    });
+
+    const normalizedUrl = normalizeJobUrl(importedJob.url || "");
+    const existingIndex = normalizedUrl
+      ? state.jobs.findIndex((item) => normalizeJobUrl(item.id || item.url || "") === normalizedUrl)
+      : -1;
+
+    if (existingIndex >= 0) {
+      state.jobs[existingIndex] = {
+        ...state.jobs[existingIndex],
+        ...importedJob,
+        id: state.jobs[existingIndex].id,
+      };
+      state.selectedJobId = state.jobs[existingIndex].id;
+      setStatus("Updated an existing saved job from image.");
+    } else {
+      state.jobs.unshift(importedJob);
+      state.selectedJobId = importedJob.id;
+      setStatus("Imported one job from image.");
+    }
+
+    state.editorJobId = null;
+    await saveJobs();
+    render();
+  } finally {
+    setImageImportBusy(false);
+  }
+}
+
+function presentImageImportFailure(error) {
+  logFormatterEvent("image import:failed", {
+    message: error?.message ? String(error.message).trim() : "Unknown image import error.",
+  });
+  const message = formatImageImportFailureMessage(error);
+  setStatus(message);
+  openFormatterSettingsPanel();
+}
+
+function setImageImportBusy(isBusy) {
+  state.pendingImageImport = Boolean(isBusy);
+  importImageBtn.disabled = Boolean(isBusy);
+  importImageBtn.textContent = isBusy ? "..." : "Image";
+}
+
+function formatImageImportFailureMessage(error) {
+  const rawMessage = error?.message ? String(error.message).trim() : "Image import failed.";
+  if (/timed out after/i.test(rawMessage)) {
+    return "Image import timed out before AI returned. Open AI for request logs.";
+  }
+  if (/^Request failed \(\d+\)/i.test(rawMessage)) {
+    return `Image import API error. ${rawMessage}`;
+  }
+  if (/valid JSON|parse the model response as JSON/i.test(rawMessage)) {
+    return "Image import failed because the model response was not parseable. Open AI for logs.";
+  }
+  return rawMessage;
+}
+
+function canUseVisionImport() {
+  return hasFormatterConfigValues();
+}
+
+function hasFormatterConfigValues() {
+  return Boolean(
+    state.formatterConfig.apiKey &&
+      state.formatterConfig.model &&
+      state.formatterConfig.endpoint &&
+      state.formatterConfig.provider
+  );
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the selected image."));
+    reader.onload = () => {
+      if (typeof reader.result === "string" && reader.result.startsWith("data:")) {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Image file could not be converted."));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareImageForImport(file, { sourceLabel = "" } = {}) {
+  const fileName = file.name || (sourceLabel === "clipboard" ? "pasted-image.png" : "image");
+  const mimeType = file.type || "image/png";
+  const originalDataUrl = await readFileAsDataUrl(file);
+  const optimizedImage = await optimizeImageForVision({ dataUrl: originalDataUrl, mimeType });
+
+  logFormatterEvent("image import:prepared", {
+    source: sourceLabel || "file",
+    fileName,
+    originalBytes: typeof file.size === "number" ? file.size : estimateDataUrlBytes(originalDataUrl),
+    preparedBytes: estimateDataUrlBytes(optimizedImage.dataUrl),
+    mimeType: optimizedImage.mimeType,
+    width: optimizedImage.width,
+    height: optimizedImage.height,
+  });
+
+  return {
+    fileName,
+    mimeType: optimizedImage.mimeType,
+    dataUrl: optimizedImage.dataUrl,
+  };
+}
+
+async function optimizeImageForVision({ dataUrl, mimeType }) {
+  const originalBytes = estimateDataUrlBytes(dataUrl);
+  const image = await loadImageFromDataUrl(dataUrl);
+  const targetSize = fitImageWithinBounds(image.naturalWidth, image.naturalHeight, IMAGE_IMPORT_MAX_DIMENSION);
+  const needsResize = targetSize.width !== image.naturalWidth || targetSize.height !== image.naturalHeight;
+  const needsCompression = originalBytes > IMAGE_IMPORT_MAX_BYTES;
+
+  if (!needsResize && !needsCompression) {
+    return {
+      dataUrl,
+      mimeType,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    };
+  }
+
+  let quality = IMAGE_IMPORT_JPEG_QUALITY;
+  let output = renderImageToDataUrl(image, targetSize, "image/jpeg", quality);
+
+  while (estimateDataUrlBytes(output) > IMAGE_IMPORT_MAX_BYTES && quality > 0.62) {
+    quality -= 0.08;
+    output = renderImageToDataUrl(image, targetSize, "image/jpeg", quality);
+  }
+
+  return {
+    dataUrl: output,
+    mimeType: "image/jpeg",
+    width: targetSize.width,
+    height: targetSize.height,
+  };
+}
+
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not decode the selected image."));
+    image.src = dataUrl;
+  });
+}
+
+function fitImageWithinBounds(width, height, maxDimension) {
+  const largestEdge = Math.max(width, height);
+  if (!largestEdge || largestEdge <= maxDimension) {
+    return { width, height };
+  }
+
+  const scale = maxDimension / largestEdge;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+function renderImageToDataUrl(image, targetSize, mimeType, quality) {
+  const canvas = document.createElement("canvas");
+  canvas.width = targetSize.width;
+  canvas.height = targetSize.height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Could not prepare the image for upload.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL(mimeType, quality);
+}
+
+function estimateDataUrlBytes(dataUrl) {
+  const base64 = String(dataUrl || "").split(",")[1] || "";
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+function getImageFileFromClipboardEvent(event) {
+  const items = Array.from(event.clipboardData?.items || []);
+  for (const item of items) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+  return null;
+}
+
+async function parseJobFromImage({ fileName, mimeType, dataUrl, sourceLabel = "" }) {
+  const prompt = buildImageImportPrompt();
+  const context = {
+    source: "image-import",
+    fileName,
+    mimeType,
+    importSource: sourceLabel || "file",
+  };
+
+  let rawText = "";
+  if (state.formatterConfig.provider === FORMATTER_PROVIDERS.ANTHROPIC) {
+    rawText = await analyzeImageWithAnthropic(prompt, { mimeType, dataUrl }, state.formatterConfig, context);
+  } else {
+    rawText = await analyzeImageWithOpenAI(prompt, { dataUrl }, state.formatterConfig, context);
+  }
+
+  const parsed = parseImportedJobResponse(rawText);
+  return buildImportedJob(parsed, { fileName });
+}
+
+function buildImageImportPrompt() {
+  return [
+    "你将看到一张招聘岗位截图，可能来自招聘网站、聊天记录、PDF截图或朋友圈转发。",
+    "请先判断它是不是一条真实的岗位信息，而不是简历、闲聊、广告或别的图片。",
+    "只提取图片里明确可见的信息，不要脑补，不要补充，不要总结。",
+    "请严格输出一个 JSON 对象，不要解释，不要 Markdown 代码块。",
+    'JSON 字段固定为：{"isJobPosting":true,"role":"","company":"","location":"","jdText":"","sourceUrl":"","reason":""}',
+    "要求：",
+    "- role: 岗位名称，不确定时尽量提取最像职位标题的一句",
+    "- company: 公司名，不确定就留空",
+    "- location: 城市或工作地点，不确定就留空",
+    "- jdText: 把图片里能识别到的岗位描述整理成纯文本，保留换行，不要改写",
+    "- sourceUrl: 只有图片里明确出现链接时才填写，否则留空",
+    "- 如果不是岗位信息，isJobPosting 设为 false，并在 reason 简要说明",
+  ].join("\n");
+}
+
+async function analyzeImageWithOpenAI(prompt, image, formatterConfig, context = {}) {
+  const controller = new AbortController();
+  const startedAt = performance.now();
+  const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.OPENAI, formatterConfig.endpoint);
+  let didTimeout = false;
+  const timeout = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, IMAGE_IMPORT_TIMEOUT_MS);
+
+  logFormatterEvent("openai image:start", {
+    ...context,
+    model: formatterConfig.model,
+    endpoint,
+    promptLength: prompt.length,
+    timeoutMs: IMAGE_IMPORT_TIMEOUT_MS,
+  });
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${formatterConfig.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: formatterConfig.model,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+              {
+                type: "input_image",
+                image_url: image.dataUrl,
+              },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    logFormatterEvent("openai image:response", {
+      ...context,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+
+    if (!response.ok) {
+      throw new Error(await describeFormatterError(response));
+    }
+
+    const payload = await response.json();
+    const outputText = extractModelOutputText(payload);
+    const sanitized = sanitizeFormattedText(outputText);
+    if (!sanitized) {
+      logFormatterEvent("openai image:empty-output", summarizeFormatterPayload(payload));
+    }
+    logFormatterEvent("openai image:done", {
+      ...context,
+      outputLength: sanitized.length,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    return sanitized;
+  } catch (error) {
+    const normalizedError = normalizeFormatterRuntimeError(error, {
+      didTimeout,
+      timeoutMs: IMAGE_IMPORT_TIMEOUT_MS,
+    });
+    logFormatterEvent("openai image:error", {
+      ...context,
+      error: normalizedError.message,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    throw normalizedError;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function analyzeImageWithAnthropic(prompt, image, formatterConfig, context = {}) {
+  const controller = new AbortController();
+  const startedAt = performance.now();
+  const endpoint = normalizeFormatterEndpoint(FORMATTER_PROVIDERS.ANTHROPIC, formatterConfig.endpoint);
+  let didTimeout = false;
+  const timeout = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, IMAGE_IMPORT_TIMEOUT_MS);
+  const base64Image = parseDataUrl(image.dataUrl);
+
+  logFormatterEvent("anthropic image:start", {
+    ...context,
+    model: formatterConfig.model,
+    endpoint,
+    promptLength: prompt.length,
+    timeoutMs: IMAGE_IMPORT_TIMEOUT_MS,
+  });
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "x-api-key": formatterConfig.apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: formatterConfig.model,
+        max_tokens: 1600,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: image.mimeType || base64Image.mimeType || "image/png",
+                  data: base64Image.base64,
+                },
+              },
+              {
+                type: "text",
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    logFormatterEvent("anthropic image:response", {
+      ...context,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+
+    if (!response.ok) {
+      throw new Error(await describeFormatterError(response));
+    }
+
+    const payload = await response.json();
+    const outputText = extractAnthropicOutputText(payload);
+    const sanitized = sanitizeFormattedText(outputText);
+    if (!sanitized) {
+      logFormatterEvent("anthropic image:empty-output", summarizeFormatterPayload(payload));
+    }
+    logFormatterEvent("anthropic image:done", {
+      ...context,
+      outputLength: sanitized.length,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    return sanitized;
+  } catch (error) {
+    const normalizedError = normalizeFormatterRuntimeError(error, {
+      didTimeout,
+      timeoutMs: IMAGE_IMPORT_TIMEOUT_MS,
+    });
+    logFormatterEvent("anthropic image:error", {
+      ...context,
+      error: normalizedError.message,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+    throw normalizedError;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function parseImportedJobResponse(text) {
+  const jsonText = extractJsonObject(text);
+  if (!jsonText) {
+    throw new Error("Model did not return valid JSON for the image.");
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("Could not parse the model response as JSON.");
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Image parsing returned an invalid payload.");
+  }
+
+  if (parsed.isJobPosting === false) {
+    throw new Error(parsed.reason ? `Image is not a job posting: ${String(parsed.reason).trim()}` : "Image is not a job posting.");
+  }
+
+  const role = normalizeImportedText(parsed.role);
+  const company = normalizeImportedText(parsed.company);
+  const location = normalizeImportedText(parsed.location);
+  const jdText = normalizeImportedMultilineText(parsed.jdText);
+  const url = normalizeImportedText(parsed.sourceUrl);
+
+  if (!role && !jdText) {
+    throw new Error("Could not extract enough job information from the image.");
+  }
+
+  return {
+    role,
+    company,
+    location,
+    jdText,
+    url,
+  };
+}
+
+function buildImportedJob(parsed, { fileName }) {
+  const normalizedUrl = normalizeJobUrl(parsed.url || "");
+  return {
+    id: normalizedUrl || `image:${crypto.randomUUID()}`,
+    url: normalizedUrl,
+    role: parsed.role || "Imported job",
+    company: parsed.company || "",
+    location: parsed.location || "",
+    jdText: parsed.jdText || "",
+    note: "",
+    capturedAt: new Date().toISOString(),
+    sourceType: "image",
+    sourceLabel: fileName ? `Image import · ${fileName}` : "Image import",
+  };
+}
+
+function extractJsonObject(text) {
+  const source = sanitizeFormattedText(text);
+  const start = source.indexOf("{");
+  if (start === -1) return "";
+
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (char === "\\") {
+        isEscaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1);
+      }
+    }
+  }
+
+  return "";
+}
+
+function normalizeImportedText(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeImportedMultilineText(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseDataUrl(dataUrl) {
+  const match = String(dataUrl || "").match(/^data:([^;]+);base64,(.+)$/u);
+  if (!match) {
+    throw new Error("Selected image is not a valid data URL.");
+  }
+
+  return {
+    mimeType: match[1],
+    base64: match[2],
+  };
+}
+
 function reorderJobs(sourceId, targetId) {
   const sourceIndex = state.jobs.findIndex((item) => item.id === sourceId);
   const targetIndex = state.jobs.findIndex((item) => item.id === targetId);
@@ -1333,7 +1984,7 @@ function formatSource(url = "") {
 }
 
 function formatReaderMeta(job) {
-  const parts = [job.company, job.location].filter(Boolean);
+  const parts = [job.company, job.location, job.sourceType === "image" ? job.sourceLabel : ""].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Company or location pending";
 }
 

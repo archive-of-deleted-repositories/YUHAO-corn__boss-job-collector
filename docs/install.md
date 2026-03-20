@@ -33,6 +33,13 @@ https://github.com/YUHAO-corn/boss-job-collector/releases/latest
 4. 点击 `Capture`
 5. 在侧边栏里查看、排序、备注和导出岗位
 
+如果你要用图片导入：
+
+- 推荐：点击 `Image` 后，直接把截图粘贴进去
+- 备用：再考虑选择本地图片文件
+
+推荐优先使用剪贴板粘贴，因为本地文件在不同来源、分辨率或压缩方式下，更容易出现识别失败。
+
 ## 常见问题
 
 ### 为什么必须打开 Developer mode？

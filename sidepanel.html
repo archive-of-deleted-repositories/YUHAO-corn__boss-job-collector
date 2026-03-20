@@ -17,54 +17,76 @@
           <span id="statusText">Ready.</span>
         </div>
         <div class="toolbar-controls">
-          <button id="captureBtn" class="primary-btn toolbar-btn toolbar-btn-primary">Capture</button>
-          <button id="copyMarkdownBtn" class="ghost-btn toolbar-btn">Copy MD</button>
-          <button id="exportJsonBtn" class="ghost-btn toolbar-btn">Export JSON</button>
+          <div class="toolbar-group toolbar-group-primary">
+            <button id="captureBtn" class="primary-btn toolbar-btn toolbar-btn-primary" type="button" title="Capture current BOSS job" aria-label="Capture current BOSS job">Capture</button>
+            <div class="image-import-wrap">
+              <button id="importImageBtn" class="ghost-btn toolbar-btn toolbar-btn-accent" type="button" title="Import a job from image" aria-label="Import a job from image" aria-expanded="false">Image</button>
+              <section id="imageImportPanel" class="image-import-panel" hidden>
+                <div class="image-import-panel-head">
+                  <strong>Import Job</strong>
+                  <span>Paste a screenshot first, choose a file only if needed</span>
+                </div>
+                <button id="imageImportPasteTarget" class="image-import-paste-target" type="button">
+                  <span class="image-import-paste-title">Paste screenshot</span>
+                  <span class="image-import-paste-hint">Recommended: press Ctrl/Cmd + V here</span>
+                </button>
+                <button id="imageImportChooseBtn" class="ghost-btn image-import-choose-btn" type="button">Choose file</button>
+              </section>
+            </div>
+          </div>
+          <div class="toolbar-group toolbar-group-secondary">
+            <button id="copyMarkdownBtn" class="ghost-btn toolbar-btn toolbar-btn-secondary" type="button" title="Copy all jobs as Markdown" aria-label="Copy all jobs as Markdown">Copy MD</button>
+            <button id="exportJsonBtn" class="ghost-btn toolbar-btn toolbar-btn-secondary" type="button" title="Export all jobs as JSON" aria-label="Export all jobs as JSON">Export</button>
+          </div>
           <div class="settings-wrap toolbar-settings">
-            <button id="formatterSettingsBtn" class="ghost-btn toolbar-btn" type="button" aria-expanded="false">AI Format</button>
+            <button id="formatterSettingsBtn" class="ghost-btn toolbar-btn toolbar-btn-secondary toolbar-btn-settings" type="button" title="AI settings" aria-label="AI settings" aria-expanded="false">AI</button>
             <section id="formatterSettingsPanel" class="settings-panel" hidden>
               <form id="formatterSettingsForm" class="settings-form">
-                <label class="settings-switch-row">
-                  <span>Enable JD formatter</span>
-                  <span class="settings-switch">
-                    <input id="formatterEnabledInput" type="checkbox" role="switch" />
-                    <span class="settings-switch-ui" aria-hidden="true"></span>
-                  </span>
-                </label>
-
-                <label>
-                  <span>Provider</span>
-                  <select id="formatterProviderInput">
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Model</span>
-                  <input id="formatterModelInput" type="text" placeholder="Model name" autocomplete="off" />
-                </label>
-
-                <label>
-                  <span>Endpoint / Base URL</span>
-                  <input id="formatterEndpointInput" type="text" placeholder="https://api.openai.com/v1/responses" autocomplete="off" />
-                </label>
-
-                <label>
-                  <span>API Key</span>
-                  <input id="formatterApiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
-                </label>
-
-                <p class="settings-note">Use OpenAI provider for OpenAI-compatible APIs (including Doubao Ark).</p>
-                <p id="formatterTestStatus" class="settings-test-status" aria-live="polite"></p>
-                <pre id="formatterTestPreview" class="settings-test-preview is-hidden"></pre>
-                <pre id="formatterDebugLog" class="settings-debug-log is-hidden"></pre>
-
-                <div class="settings-actions">
-                  <button id="formatterTestBtn" type="button" class="ghost-btn settings-btn">Test</button>
-                  <button id="formatterCloseBtn" type="button" class="ghost-btn settings-btn">Close</button>
-                  <button id="formatterSaveBtn" type="submit" class="primary-btn settings-btn">Save</button>
+                <div class="settings-header">
+                  <strong>AI</strong>
+                  <span>Used by JD formatter and image import</span>
                 </div>
+                  <label class="settings-switch-row">
+                    <span>Enable JD formatter</span>
+                    <span class="settings-switch">
+                      <input id="formatterEnabledInput" type="checkbox" role="switch" />
+                      <span class="settings-switch-ui" aria-hidden="true"></span>
+                    </span>
+                  </label>
+
+                  <label>
+                    <span>Provider</span>
+                    <select id="formatterProviderInput">
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Model</span>
+                    <input id="formatterModelInput" type="text" placeholder="Model name" autocomplete="off" />
+                  </label>
+
+                  <label>
+                    <span>Endpoint / Base URL</span>
+                    <input id="formatterEndpointInput" type="text" placeholder="https://api.openai.com/v1/responses" autocomplete="off" />
+                  </label>
+
+                  <label>
+                    <span>API Key</span>
+                    <input id="formatterApiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+                  </label>
+
+                  <p class="settings-note">This configuration is reused by JD formatting and image import. Use OpenAI provider for OpenAI-compatible APIs, including Doubao Ark.</p>
+                  <p id="formatterTestStatus" class="settings-test-status" aria-live="polite"></p>
+                  <pre id="formatterTestPreview" class="settings-test-preview is-hidden"></pre>
+                  <pre id="formatterDebugLog" class="settings-debug-log is-hidden"></pre>
+
+                  <div class="settings-actions">
+                    <button id="formatterTestBtn" type="button" class="ghost-btn settings-btn">Test</button>
+                    <button id="formatterCloseBtn" type="button" class="ghost-btn settings-btn">Close</button>
+                    <button id="formatterSaveBtn" type="submit" class="primary-btn settings-btn">Save</button>
+                  </div>
               </form>
             </section>
           </div>
@@ -80,7 +102,7 @@
             <div id="emptyState" class="empty-state">
               <div class="empty-icon">Q</div>
               <h2>No jobs captured yet</h2>
-              <p>Open a BOSS listing page, click one job, then use <strong>Capture</strong>.</p>
+              <p>Open a BOSS listing page and use <strong>Capture</strong>, or upload a screenshot with <strong>Image</strong>.</p>
             </div>
             <div id="jobList" class="job-list"></div>
           </div>
@@ -137,6 +159,8 @@
         </section>
       </main>
     </div>
+
+    <input id="imageImportInput" type="file" accept="image/*" hidden />
 
     <template id="jobCardTemplate">
       <article class="job-card" draggable="true">
